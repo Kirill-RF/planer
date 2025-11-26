@@ -15,4 +15,12 @@ urlpatterns = [
     path('survey/<int:survey_id>/fill/', 
          views.fill_survey, name='fill_survey'),
     path('results/', views.results_overview, name='results_overview'),
+    
+    # === НОВЫЕ URL ДЛЯ ФОТООТЧЁТА ===
+    path('photo-report/create/', views.create_photo_report, name='create_photo_report'),
+    path('photo-report/pending/', views.pending_photo_reports, name='pending_photo_reports'),
+    path('photo-report/review/<int:report_id>/', views.review_photo_report, name='review_photo_report'),
+    path('photo-report/rejected/', views.my_rejected_reports, name='my_rejected_reports'),
+    path('photo-report/assign/', views.assign_photo_report, name='assign_photo_report'),
+    path('photo-report/tasks/', views.my_photo_tasks, name='my_photo_tasks'),
 ]

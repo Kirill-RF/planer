@@ -1,6 +1,5 @@
 <!-- templates/surveys/home.html -->
 {% extends 'base.html' %}
-{% block title %}Главная{% endblock %}
 {% block content %}
 <h1>Доступные задачи</h1>
 
@@ -33,7 +32,24 @@
   <div class="alert alert-warning">Нет активных анкет.</div>
 {% endif %}
 
-<div class="mt-4">
-  <a href="{% url 'upload_clients' %}" class="btn btn-outline-secondary btn-sm">Загрузить клиентов (для модераторов)</a>
-</div>
+<!-- Новая кнопка для сотрудников -->
+{% if not user_is_moderator %}
+  <div class="mt-4">
+    <a href="{% url 'create_photo_report' %}" class="btn btn-success">
+      📸 Сделать фотоотчёт
+    </a>
+  </div>
+{% endif %}
+
+<!-- Кнопка для модераторов -->
+{% if user_is_moderator %}
+	<div class="mt-3">
+	  <a href="{% url 'upload_clients' %}" class="btn btn-outline-secondary btn-sm">Загрузить клиентов (для модераторов)</a>
+	</div>
+  <div class="mt-4">
+    <a href="{% url 'assign_photo_report' %}" class="btn btn-info">
+      📋 Назначить фотоотчёт
+    </a>
+  </div>
+{% endif %}
 {% endblock %}

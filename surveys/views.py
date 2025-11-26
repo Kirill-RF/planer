@@ -7,33 +7,14 @@ import os
 from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from .models import Survey, Question, Option, Client, Employee, Response, Holding
 from collections import defaultdict
-
-
-def normalize_company_name(name: str) -> str:
-    if not name:
-        return ""
-    name = re.sub(r'\s+', ' ', name.strip())
-    for abbr in ['ООО', 'ИП', 'ЗАО', 'ОАО', 'АО', 'ПАО', 'НКО']:
-        name = re.sub(rf'\b{abbr.lower()}\b', abbr, name, flags=re.IGNORECASE)
-    return name
-
-
-def normalize_phone(phone):
-    if not phone:
-        return None
-    cleaned = re.sub(r'[^\d+]', '', str(phone))
-    if cleaned.startswith('8'):
-        cleaned = '+7' + cleaned[1:]
-    elif cleaned.startswith('7') and not cleaned.startswith('+7'):
-        cleaned = '+' + cleaned
-    elif not cleaned.startswith('+7'):
-        return None
-    if len(cleaned) == 12:
-        return cleaned
-    return None
-
+from .models import (
+    Survey, Question, Option, Client, Employee, Response,
+    PhotoReport, Photo, ModeratorComment, Holding,
+    normalize_company_name, normalize_phone
+)
+from .utils import is_high_quality_image
+# === ФУНКЦИЯ ЗАГРУЗКИ КЛИЕНТОВ (восстановлена!) ===
 
 def upload_clients(request):
     if request.method == 'POST':
@@ -150,6 +131,122 @@ def upload_clients(request):
             return redirect('upload_clients')
 
     return render(request, 'surveys/upload_clients.html')
+
+
+# === ОСТАЛЬНЫЕ VIEW (без изменений) ===
+
+def create_photo_report(request):
+    if request.method == 'POST':
+        client_id = request.POST.get('client_id')
+        stand_count = request.POST.get('stand_count')
+        address = request.POST.get('address', '')
+        client = get_object_or_404(Client, id=client_id)
+        employee = get_object_or_404(Employee, id=request.POST.get('employee_id'))
+
+        report = PhotoReport.objects.create(
+            client=client,
+            employee=employee,
+            created_by=employee,
+            stand_count=stand_count,
+            address=address,
+            status='submitted'
+        )
+
+        for f in request.FILES.getlist('photos'):
+            photo_path = f.temporary_file_path() if hasattr(f, 'temporary_file_path') else None
+            is_high = is_high_quality_image(photo_path) if photo_path else False
+            Photo.objects.create(
+                report=report,
+                image=f,
+                is_high_quality=is_high
+            )
+
+        messages.success(request, "Фотоотчёт отправлен на проверку!")
+        return redirect('home')
+
+    clients = Client.objects.all()
+    employees = Employee.objects.all()
+    return render(request, 'surveys/create_photo_report.html', {
+        'clients': clients,
+        'employees': employees,
+    })
+
+
+def pending_photo_reports(request):
+    """Модератор: список отчётов на проверку + назначенные"""
+    # Отчёты, отправленные сотрудниками (status='submitted')
+    submitted_reports = PhotoReport.objects.filter(status='submitted')
+    # Отчёты, назначенные модератором (status='draft' и assigned_to не None)
+    assigned_reports = PhotoReport.objects.filter(status='draft', assigned_to__isnull=False)
+
+    all_reports = (submitted_reports | assigned_reports).distinct()
+    return render(request, 'surveys/pending_reports.html', {
+        'reports': all_reports,
+        'user_is_moderator': True  # для шаблона
+    })
+
+
+def review_photo_report(request, report_id):
+    report = get_object_or_404(PhotoReport, id=report_id)
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'approve':
+            report.status = 'approved'
+            report.moderator = get_object_or_404(Employee, id=request.POST.get('moderator_id'))
+            report.save()
+            messages.success(request, "Отчёт принят!")
+        elif action == 'reject':
+            report.status = 'rejected'
+            report.rejected_reason = request.POST.get('reason')
+            report.moderator = get_object_or_404(Employee, id=request.POST.get('moderator_id'))
+            report.save()
+            messages.warning(request, "Отчёт возвращён на доработку.")
+        return redirect('pending_photo_reports')
+    moderators = Employee.objects.all()
+    return render(request, 'surveys/review_report.html', {
+        'report': report,
+        'moderators': moderators,
+    })
+
+
+# surveys/views.py
+
+def assign_photo_report(request):
+    """Модератор назначает задачу на фотоотчёт"""
+    if request.method == 'POST':
+        client_id = request.POST.get('client_id')
+        assigned_to_id = request.POST.get('assigned_to_id')
+        stand_count = request.POST.get('stand_count', 1)
+        comment = request.POST.get('assignment_comment', '')
+        
+        client = get_object_or_404(Client, id=client_id)
+        assigned_to = get_object_or_404(Employee, id=assigned_to_id)
+
+        # Создаём задачу — СОХРАНЯЕМ В БД!
+        report = PhotoReport.objects.create(
+            client=client,
+            employee=assigned_to,          # сотрудник, который выполнит
+            assigned_to=assigned_to,       # явное назначение
+            stand_count=stand_count,
+            status='draft',
+            assignment_comment=comment
+        )
+
+        messages.success(request, f"Задача назначена сотруднику {assigned_to.full_name}!")
+        return redirect('pending_photo_reports')
+
+    # GET-запрос — показываем форму
+    clients = Client.objects.all()
+    employees = Employee.objects.all()
+    return render(request, 'surveys/assign_photo_report.html', {
+        'clients': clients,
+        'employees': employees,
+    })
+
+
+def my_rejected_reports(request):
+    reports = PhotoReport.objects.filter(status='rejected')
+    return render(request, 'surveys/my_rejected_reports.html', {'reports': reports})
 
 
 def fill_survey(request, survey_id):
@@ -310,6 +407,7 @@ def results_overview(request):
     return render(request, 'surveys/results_overview.html', context)
 
 
+# surveys/views.py — убедись, что в home есть:
 def home(request):
     surveys = Survey.objects.filter(is_active=True)
     surveys_with_progress = []
@@ -322,5 +420,30 @@ def home(request):
             'completed': completed,
         })
     return render(request, 'surveys/home.html', {
-        'surveys_with_progress': surveys_with_progress
+        'surveys_with_progress': surveys_with_progress,
+        'user_is_moderator': request.user.is_staff,  # ← ВАЖНО: нужно для условий в шаблоне
+    })
+
+def my_photo_tasks(request):
+    """Сотрудник: список назначенных ему задач и отправленных отчётов"""
+    # Получаем текущего сотрудника (временно — по ID из сессии или параметру)
+    # В будущем: request.user.employee
+    employee_id = request.GET.get('employee_id')
+    if not employee_id:
+        # Пока просто берем первого сотрудника для демонстрации
+        employee = Employee.objects.first()
+    else:
+        employee = get_object_or_404(Employee, id=employee_id)
+
+    if not employee:
+        return render(request, 'surveys/my_photo_tasks.html', {'tasks': []})
+
+    # Назначенные задачи (статус draft)
+    assigned_tasks = PhotoReport.objects.filter(assigned_to=employee, status='draft')
+    # Отправленные отчёты (статус submitted или rejected)
+    my_reports = PhotoReport.objects.filter(employee=employee).exclude(status='draft')
+
+    all_tasks = (assigned_tasks | my_reports).distinct().order_by('-created_at')
+    return render(request, 'surveys/my_photo_tasks.html', {
+        'tasks': all_tasks,
     })

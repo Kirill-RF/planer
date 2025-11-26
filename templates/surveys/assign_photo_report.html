@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Назначить задачу на фотоотчёт</h2>
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label>Клиент</label>
+    <select name="client_id" class="form-control" required>
+      {% for c in clients %}
+        <option value="{{ c.id }}">{{ c.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-3">
+    <label>Сотрудник</label>
+    <select name="assigned_to_id" class="form-control" required>
+      {% for e in employees %}
+        <option value="{{ e.id }}">{{ e.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-3">
+    <label>Кол-во стендов</label>
+    <input type="number" name="stand_count" class="form-control" value="1" min="1">
+  </div>
+  <div class="mb-3">
+    <label>Комментарий</label>
+    <textarea name="assignment_comment" class="form-control" placeholder="Например: сфотографируйте все стенды с фасада"></textarea>
+  </div>
+  <button type="submit" class="btn btn-primary">Назначить</button>
+</form>
+<a href="{% url 'pending_photo_reports' %}" class="btn btn-secondary mt-2">← Назад</a>
+{% endblock %}

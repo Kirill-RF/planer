@@ -1,0 +1,28 @@
+<!-- templates/surveys/pending_reports.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Фотоотчёты на проверку / назначение</h2>
+{% for report in reports %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>{{ report.client }} — {{ report.stand_count }} стендов</h5>
+      <p>Сотрудник: {{ report.employee }}</p>
+      {% if report.created_by %}
+        <p>Создано: {{ report.created_by }}</p>
+      {% endif %}
+      {% if report.assigned_to %}
+        <p>Назначено: {{ report.assigned_to }}</p>
+      {% endif %}
+      <p>Статус: {{ report.get_status_display }}</p>
+      {% if report.status == 'submitted' %}
+        <a href="{% url 'review_photo_report' report.id %}" class="btn btn-warning">Проверить</a>
+      {% elif report.status == 'draft' and report.assigned_to %}
+        <a href="{% url 'review_photo_report' report.id %}" class="btn btn-info">Назначить/проверить</a>
+      {% endif %}
+    </div>
+  </div>
+{% empty %}
+  <p>Нет отчётов на проверку.</p>
+{% endfor %}
+<a href="{% url 'home' %}" class="btn btn-secondary mt-2">← Назад</a>
+{% endblock %}

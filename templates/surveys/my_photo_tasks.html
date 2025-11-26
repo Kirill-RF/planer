@@ -1,0 +1,32 @@
+<!-- templates/surveys/my_photo_tasks.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Мои задачи по фотоотчётам</h2>
+
+{% if tasks %}
+  {% for task in tasks %}
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5>{{ task.client }} — {{ task.stand_count }} стендов</h5>
+        <p><strong>Статус:</strong> {{ task.get_status_display }}</p>
+        {% if task.status == 'draft' %}
+          <a href="{% url 'create_photo_report' %}?client_id={{ task.client.id }}&employee_id={{ task.employee.id }}" class="btn btn-success">
+            Сделать фотоотчёт
+          </a>
+        {% elif task.status == 'submitted' or task.status == 'rejected' %}
+          <a href="{% url 'review_photo_report' task.id %}" class="btn btn-warning">
+            Посмотреть отчёт
+          </a>
+        {% endif %}
+        {% if task.assignment_comment %}
+          <p class="mt-2"><em>Комментарий модератора:</em> {{ task.assignment_comment }}</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-info">Нет задач.</div>
+{% endif %}
+
+<a href="{% url 'home' %}" class="btn btn-secondary mt-3">← Назад на главную</a>
+{% endblock %}

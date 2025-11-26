@@ -1,0 +1,38 @@
+<!-- templates/surveys/create_photo_report.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Создать фотоотчёт</h2>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label>Клиент</label>
+    <select name="client_id" class="form-control" required>
+      {% for c in clients %}
+        <option value="{{ c.id }}">{{ c.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-3">
+    <label>Сотрудник</label>
+    <select name="employee_id" class="form-control" required>
+      {% for e in employees %}
+        <option value="{{ e.id }}">{{ e.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-3">
+    <label>Количество стендов</label>
+    <input type="number" name="stand_count" class="form-control" required min="1">
+  </div>
+  <div class="mb-3">
+    <label>Адрес (автоматически или вручную)</label>
+    <input type="text" name="address" class="form-control">
+  </div>
+  <div class="mb-3">
+    <label>Фото (можно несколько)</label>
+    <input type="file" name="photos" multiple accept="image/*" class="form-control" required>
+  </div>
+  <button type="submit" class="btn btn-primary">Отправить на проверку</button>
+</form>
+<a href="{% url 'home' %}" class="btn btn-secondary mt-2">← Назад</a>
+{% endblock %}
