@@ -1,0 +1,232 @@
+# surveys/views.py
+import pandas as pd
+import json
+from django.core.serializers.json import DjangoJSONEncoder
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.shortcuts import get_object_or_404
+from .models import Survey, Question, Option, Client, Employee, Response
+from collections import defaultdict
+
+
+def upload_clients(request):
+    if request.method == 'POST' and request.FILES.get('excel_file'):
+        file = request.FILES['excel_file']
+        try:
+            df = pd.read_excel(file)
+            for _, row in df.iterrows():
+                Client.objects.get_or_create(
+                    full_name=row.get('full_name', ''),
+                    defaults={
+                        'phone': str(row.get('phone', ''))[:20],
+                        'email': row.get('email', '') or ''
+                    }
+                )
+            messages.success(request, "Клиенты успешно загружены!")
+        except Exception as e:
+            messages.error(request, f"Ошибка при загрузке: {e}")
+        return redirect('upload_clients')
+    return render(request, 'surveys/upload_clients.html')
+
+
+def fill_survey(request, survey_id):
+    survey = get_object_or_404(Survey, id=survey_id, is_active=True)
+    clients = Client.objects.all()
+    employees = Employee.objects.all()
+
+    if request.method == 'POST':
+        employee = Employee.objects.get(id=request.POST['employee_id'])
+        client = Client.objects.get(id=request.POST['client_id'])
+
+        for question in survey.questions.all():
+            response = Response.objects.create(
+                survey=survey,
+                question=question,
+                employee=employee,
+                client=client
+            )
+
+            answer_key = f"q_{question.id}"
+
+            if question.question_type == 'text':
+                response.text_answer = request.POST.get(answer_key)
+            elif question.question_type == 'photo':
+                if answer_key in request.FILES:
+                    response.photo = request.FILES[answer_key]
+            elif question.question_type in ['radio', 'single_select']:
+                opt_id = request.POST.get(answer_key)
+                if opt_id:
+                    try:
+                        option = Option.objects.get(id=opt_id)
+                        response.selected_options.add(option)
+                    except Option.DoesNotExist:
+                        pass
+            elif question.question_type in ['checkbox', 'multi_select']:
+                opt_ids = request.POST.getlist(f"{answer_key}[]")
+                for opt_id in opt_ids:
+                    try:
+                        option = Option.objects.get(id=opt_id)
+                        response.selected_options.add(option)
+                    except Option.DoesNotExist:
+                        continue
+
+            response.save()  # ← ВАЖНО: сохраняем каждый ответ!
+
+        messages.success(request, "Анкета успешно отправлена!")
+        return redirect('fill_survey', survey_id=survey.id)
+
+    return render(request, 'surveys/fill_survey.html', {
+        'survey': survey,
+        'clients': clients,
+        'employees': employees,
+    })
+
+
+def aggregate_responses(responses_qs):
+    """
+    Агрегирует ответы по вопросам и вариантам.
+    Возвращает структуру для горизонтальной линейчатой диаграммы (bar chart).
+    """
+    data = defaultdict(lambda: defaultdict(int))
+    question_map = {}
+    option_map = {}
+
+    for resp in responses_qs:
+        q = resp.question
+        question_map[q.id] = q.text
+        if q.question_type in ['single_select', 'multi_select', 'radio', 'checkbox']:
+            for opt in resp.selected_options.all():
+                data[q.id][opt.id] += 1
+                option_map[opt.id] = opt.text
+        elif q.question_type == 'text':
+            data[q.id]['text'] += 1
+            option_map['text'] = 'Текстовые ответы'
+
+    base_colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#7B68EE', '#00CED1', '#FFD700', '#8B4513'
+    ]
+
+    chart_data = []
+    for q_id, opt_counts in data.items():
+        total = sum(opt_counts.values())
+        labels = []
+        counts = []
+        percentages = []
+        colors = []
+
+        for i, (opt_id, count) in enumerate(opt_counts.items()):
+            labels.append(option_map.get(opt_id, str(opt_id)))
+            counts.append(count)
+            percentages.append(round((count / total * 100), 1) if total > 0 else 0)
+            colors.append(base_colors[i % len(base_colors)])
+
+        chart_data.append({
+            'question': question_map[q_id],
+            'labels': labels,
+            'counts': counts,
+            'percentages': percentages,
+            'colors': colors,
+            'total': total
+        })
+    return chart_data
+
+
+def results_overview(request):
+    surveys = Survey.objects.all()
+    clients = Client.objects.all()
+    employees = Employee.objects.all()
+
+    # Получаем ID последней анкеты
+    last_survey_id = Response.objects.order_by('-submitted_at').values_list('survey_id', flat=True).first()
+    survey_id = request.GET.get('survey') or last_survey_id
+    client_id = request.GET.get('client')
+    employee_id = request.GET.get('employee')
+    view_mode = request.GET.get('view', 'detail')
+
+    # Если нет survey_id — ничего не показываем
+    if not survey_id:
+        context = {
+            'surveys': surveys,
+            'clients': clients,
+            'employees': employees,
+            'grouped_responses': [],
+            'my_stats_json': None,
+            'company_stats_json': None,
+            'selected_survey': None,
+            'selected_client': None,
+            'selected_employee': None,
+            'view_mode': view_mode,
+        }
+        return render(request, 'surveys/results_overview.html', context)
+
+    # --- ДЕТАЛИ: только одна анкета ---
+    responses = Response.objects.filter(survey_id=survey_id).select_related(
+        'survey', 'question', 'client', 'employee'
+    ).prefetch_related('selected_options')
+
+    if client_id:
+        responses = responses.filter(client_id=client_id)
+    if employee_id:
+        responses = responses.filter(employee_id=employee_id)
+
+    grouped_responses = {}
+    for resp in responses:
+        key = (resp.client_id, resp.employee_id, resp.submitted_at.date())
+        if key not in grouped_responses:
+            grouped_responses[key] = {
+                'survey': resp.survey,
+                'client': resp.client,
+                'employee': resp.employee,
+                'date': resp.submitted_at.date(),
+                'answers': []
+            }
+        grouped_responses[key]['answers'].append(resp)
+
+    # --- АГРЕГАЦИЯ ---
+    my_stats_json = company_stats_json = None
+
+    # Все ответы по анкете
+    all_qs = Response.objects.filter(survey_id=survey_id)
+    company_stats = aggregate_responses(all_qs)
+    company_stats_json = json.dumps(company_stats, cls=DjangoJSONEncoder)
+
+    # Мои ответы (если выбран сотрудник)
+    if employee_id:
+        my_qs = Response.objects.filter(survey_id=survey_id, employee_id=employee_id)
+        my_stats = aggregate_responses(my_qs)
+        my_stats_json = json.dumps(my_stats, cls=DjangoJSONEncoder)
+
+    context = {
+        'surveys': surveys,
+        'clients': clients,
+        'employees': employees,
+        'grouped_responses': grouped_responses.values(),
+        'my_stats_json': my_stats_json,
+        'company_stats_json': company_stats_json,
+        'selected_survey': int(survey_id),
+        'selected_client': int(client_id) if client_id else None,
+        'selected_employee': int(employee_id) if employee_id else None,
+        'view_mode': view_mode,
+    }
+    return render(request, 'surveys/results_overview.html', context)
+
+
+def home(request):
+    """Главная страница — список доступных задач с планом и прогрессом"""
+    surveys = Survey.objects.filter(is_active=True)
+    
+    # Аннотируем количество заполнений по каждой анкете
+    surveys_with_progress = []
+    for survey in surveys:
+        completed = Response.objects.filter(survey=survey).count()
+        target = survey.target_count or None  # None → отображаем как "--"
+        surveys_with_progress.append({
+            'survey': survey,
+            'target': target,
+            'completed': completed,
+        })
+
+    return render(request, 'surveys/home.html', {
+        'surveys_with_progress': surveys_with_progress
+    })

@@ -1,0 +1,37 @@
+<!-- templates/surveys/results.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Результаты: {{ survey.title }}</h2>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Сотрудник</th>
+      <th>Клиент</th>
+      <th>Вопрос</th>
+      <th>Ответ</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for resp in responses %}
+    <tr>
+      <td>{{ resp.employee.full_name }}</td>
+      <td>{{ resp.client.full_name }}</td>
+      <td>{{ resp.question.text }}</td>
+      <td>
+	  {% if resp.text_answer %}
+		{{ resp.text_answer }}
+	  {% elif resp.photo %}
+		<img src="{{ resp.photo.url }}" width="80" class="img-thumbnail">
+	  {% elif resp.selected_options.exists %}
+		{% for opt in resp.selected_options.all %}
+		  {{ opt.text }}{% if not forloop.last %}, {% endif %}
+		{% endfor %}
+	  {% else %}
+		<em>Нет ответа</em>
+	  {% endif %}
+	</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

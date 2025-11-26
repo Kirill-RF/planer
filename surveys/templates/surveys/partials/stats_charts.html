@@ -1,0 +1,51 @@
+<!-- templates/surveys/partials/stats_charts.html -->
+<div class="chart-container">
+  <!-- Графики будут созданы динамически через JS -->
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const statsData = {{ stats_json|safe }};
+
+    if (statsData && Array.isArray(statsData)) {
+      const container = document.querySelector('.chart-container');
+      statsData.forEach((item, index) => {
+        // Создаём card для каждого вопроса
+        const card = document.createElement('div');
+        card.className = 'card mb-4';
+        card.innerHTML = `
+          <div class="card-header">${item.question}</div>
+          <div class="card-body">
+            <canvas id="chart_${index}" height="100"></canvas>
+          </div>
+        `;
+        container.appendChild(card);
+
+        // Инициализируем график
+        const ctx = document.getElementById(`chart_${index}`).getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: item.labels,
+            datasets: [{
+              label: 'Количество ответов',
+              data: item.counts,
+              backgroundColor: 'rgba(54, 162, 235, 0.6)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+          }
+        });
+      });
+    } else {
+      document.querySelector('.chart-container').innerHTML = '<p class="text-muted">Нет данных для отображения.</p>';
+    }
+  });
+</script>

@@ -1,0 +1,45 @@
+<!-- templates/surveys/partials/detail_results.html -->
+{% if grouped_responses %}
+  {% for group in grouped_responses %}
+    <div class="card mb-3">
+      <div class="card-header bg-light">
+        <strong>Анкета:</strong> {{ group.survey.title }} |
+        <strong>Клиент:</strong> {{ group.client.full_name }} |
+        <strong>Сотрудник:</strong> {{ group.employee.full_name }} |
+        <strong>Дата:</strong> {{ group.date|date:"d.m.Y" }}
+      </div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Вопрос</th>
+              <th>Ответ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ans in group.answers %}
+              <tr>
+                <td>{{ ans.question.text }}</td>
+                <td>
+                  {% if ans.text_answer %}
+                    {{ ans.text_answer }}
+                  {% elif ans.photo %}
+                    <img src="{{ ans.photo.url }}" width="80" class="img-thumbnail">
+                  {% elif ans.selected_options.exists %}
+                    {% for opt in ans.selected_options.all %}
+                      {{ opt.text }}{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                  {% else %}
+                    <em>Нет ответа</em>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="text-muted">Нет ответов.</p>
+{% endif %}

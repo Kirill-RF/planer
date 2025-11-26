@@ -1,0 +1,66 @@
+<!-- templates/surveys/partials/horizontal_bar_chart.html -->
+{% if stats_json %}
+<div id="charts-container-{{ chart_id }}" class="mt-3"></div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const statsData = {{ stats_json|safe }};
+    const container = document.getElementById('charts-container-{{ chart_id }}');
+
+    if (!Array.isArray(statsData) || statsData.length === 0) {
+      container.innerHTML = '<div class="alert alert-info">Нет данных для графика</div>';
+      return;
+    }
+
+    statsData.forEach((item, index) => {
+      const card = document.createElement('div');
+      card.className = 'card mb-3';
+      card.innerHTML = `
+        <div class="card-header">${item.question} (всего: ${item.total})</div>
+        <div class="card-body">
+          <canvas id="chart_${chart_id}_${index}" height="120"></canvas>
+        </div>
+      `;
+      container.appendChild(card);
+
+      const ctx = document.getElementById(`chart_${chart_id}_${index}`).getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: item.labels,
+          datasets: [{
+            label: 'Количество',
+             item.counts,
+            backgroundColor: item.colors,
+            borderColor: item.colors.map(c => c.replace('0.6', '1')),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(tooltipItem) {
+                  const value = tooltipItem.raw;
+                  const pct = item.percentages[tooltipItem.dataIndex];
+                  return `${tooltipItem.label}: ${value} (${pct}%)`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { beginAtZero: true, title: { display: true, text: 'Количество' } },
+            y: { title: { display: true, text: 'Варианты' } }
+          }
+        }
+      });
+    });
+  });
+</script>
+{% else %}
+<div class="alert alert-warning">Нет данных для отображения графика.</div>
+{% endif %}
