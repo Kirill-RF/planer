@@ -1,0 +1,16 @@
+<!-- templates/surveys/pending_reports.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Фотоотчёты на проверку</h2>
+{% for report in reports %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>{{ report.client }} — {{ report.stand_count }} стендов</h5>
+      <p>Сотрудник: {{ report.employee }}</p>
+      <a href="{% url 'review_photo_report' report.id %}" class="btn btn-warning">Проверить</a>
+    </div>
+  </div>
+{% empty %}
+  <p>Нет отчётов на проверку.</p>
+{% endfor %}
+{% endblock %}

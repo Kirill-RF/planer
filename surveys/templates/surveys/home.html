@@ -33,6 +33,13 @@
   <div class="alert alert-warning">Нет активных анкет.</div>
 {% endif %}
 
+<!-- Добавляем кнопки для фотоотчётов -->
+{% if user_is_moderator %}
+  <a href="{% url 'pending_photo_reports' %}" class="btn btn-warning mb-3">📋 Проверить фотоотчёты</a>
+{% else %}
+  <a href="{% url 'create_photo_report' %}" class="btn btn-success mb-3">📸 Создать фотоотчёт</a>
+{% endif %}
+
 <div class="mt-4">
   <a href="{% url 'upload_clients' %}" class="btn btn-outline-secondary btn-sm">Загрузить клиентов (для модераторов)</a>
 </div>

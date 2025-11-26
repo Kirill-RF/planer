@@ -1,6 +1,6 @@
 # surveys/admin.py
 from django.contrib import admin
-from .models import Survey, Question, Option, Client, Employee, Holding
+from .models import Survey, Question, Option, Client, Employee, Holding, PhotoReport, Photo, ModeratorComment
 
 
 class OptionInline(admin.TabularInline):
@@ -42,3 +42,14 @@ class EmployeeAdmin(admin.ModelAdmin):
 class HoldingAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
+
+
+@admin.register(PhotoReport)
+class PhotoReportAdmin(admin.ModelAdmin):
+    list_display = ('client', 'employee', 'status', 'created_at')
+    list_filter = ('status', 'client', 'employee')
+
+
+@admin.register(Photo)
+class PhotoAdmin(admin.ModelAdmin):
+    list_display = ('report', 'is_high_quality')

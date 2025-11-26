@@ -1,0 +1,35 @@
+<!-- templates/surveys/review_report.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Проверка фотоотчёта: {{ report.client }}</h2>
+
+<div class="row">
+  {% for photo in report.photos.all %}
+    <div class="col-md-4 mb-3">
+      <img src="{{ photo.image.url }}" class="img-fluid">
+      <p>Качество: {% if photo.is_high_quality %}✅{% else %}⚠️ Низкое{% endif %}</p>
+    </div>
+  {% endfor %}
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label>Модератор</label>
+    <select name="moderator_id" class="form-control" required>
+      {% for m in moderators %}
+        <option value="{{ m.id }}">{{ m.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="btn-group">
+    <button name="action" value="approve" class="btn btn-success">✅ Принять</button>
+    <button type="button" class="btn btn-danger" data-bs-toggle="collapse" data-bs-target="#rejectForm">↩️ На доработку</button>
+  </div>
+
+  <div id="rejectForm" class="collapse mt-3">
+    <textarea name="reason" class="form-control" placeholder="Комментарий..." required></textarea>
+    <button name="action" value="reject" class="btn btn-warning mt-2">Отправить на доработку</button>
+  </div>
+</form>
+{% endblock %}

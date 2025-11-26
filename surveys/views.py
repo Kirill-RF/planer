@@ -322,5 +322,97 @@ def home(request):
             'completed': completed,
         })
     return render(request, 'surveys/home.html', {
-        'surveys_with_progress': surveys_with_progress
+        'surveys_with_progress': surveys_with_progress,
+        'user_is_moderator': request.user.is_staff,  # нужно для кнопок
     })
+
+
+# === ФОТООТЧЁТ ===
+
+from .utils import is_high_quality_image
+from .models import PhotoReport, Photo, ModeratorComment
+import os
+
+def create_photo_report(request):
+    """Сотрудник создаёт фотоотчёт"""
+    if request.method == 'POST':
+        client_id = request.POST.get('client_id')
+        stand_count = request.POST.get('stand_count')
+        address = request.POST.get('address', '')
+        client = get_object_or_404(Client, id=client_id)
+        employee = get_object_or_404(Employee, id=request.POST.get('employee_id'))
+
+        report = PhotoReport.objects.create(
+            client=client,
+            employee=employee,
+            stand_count=stand_count,
+            address=address,
+            status='submitted'
+        )
+
+        # Сохраняем фото
+        for f in request.FILES.getlist('photos'):
+            # Сохраняем файл во временный файл для проверки качества
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                for chunk in f.chunks():
+                    tmp_file.write(chunk)
+                tmp_path = tmp_file.name
+
+            is_high = is_high_quality_image(tmp_path)
+            
+            # Перемещаем файл в правильное место
+            photo_instance = Photo.objects.create(
+                report=report,
+                image=f,
+                is_high_quality=is_high
+            )
+            
+            # Удаляем временный файл
+            os.unlink(tmp_path)
+
+        messages.success(request, "Фотоотчёт отправлен на проверку!")
+        return redirect('home')
+
+    clients = Client.objects.all()
+    employees = Employee.objects.all()
+    return render(request, 'surveys/create_photo_report.html', {
+        'clients': clients,
+        'employees': employees,
+    })
+
+
+def pending_photo_reports(request):
+    """Модератор: список отчётов на проверку"""
+    reports = PhotoReport.objects.filter(status='submitted')
+    return render(request, 'surveys/pending_reports.html', {'reports': reports})
+
+
+def review_photo_report(request, report_id):
+    """Модератор: проверка отчёта"""
+    report = get_object_or_404(PhotoReport, id=report_id)
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'approve':
+            report.status = 'approved'
+            report.moderator = get_object_or_404(Employee, id=request.POST.get('moderator_id'))
+            report.save()
+            messages.success(request, "Отчёт принят!")
+        elif action == 'reject':
+            report.status = 'rejected'
+            report.rejected_reason = request.POST.get('reason')
+            report.moderator = get_object_or_404(Employee, id=request.POST.get('moderator_id'))
+            report.save()
+            messages.warning(request, "Отчёт возвращён на доработку.")
+        return redirect('pending_photo_reports')
+    moderators = Employee.objects.all()
+    return render(request, 'surveys/review_report.html', {
+        'report': report,
+        'moderators': moderators,
+    })
+
+
+def my_rejected_reports(request):
+    """Сотрудник: список отчётов на доработку"""
+    # В будущем можно фильтровать по request.user.employee
+    reports = PhotoReport.objects.filter(status='rejected')
+    return render(request, 'surveys/my_rejected_reports.html', {'reports': reports})

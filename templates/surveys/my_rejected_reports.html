@@ -1,0 +1,16 @@
+<!-- templates/surveys/my_rejected_reports.html -->
+{% extends 'base.html' %}
+{% block content %}
+<h2>Ваши фотоотчёты на доработке</h2>
+{% for report in reports %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>{{ report.client }} — {{ report.stand_count }} стендов</h5>
+      <p>Сотрудник: {{ report.employee }}</p>
+      <p>Причина возврата: {{ report.rejected_reason }}</p>
+    </div>
+  </div>
+{% empty %}
+  <p>У вас нет отчётов на доработке.</p>
+{% endfor %}
+{% endblock %}
