@@ -7,6 +7,8 @@ import os
 from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from collections import defaultdict
 from .models import (
     Survey, Question, Option, Client, Employee, Response,
@@ -14,6 +16,54 @@ from .models import (
     normalize_company_name, normalize_phone
 )
 from .utils import is_high_quality_image
+
+
+# === ФУНКЦИЯ АВТОРИЗАЦИИ СОТРУДНИКА ===
+def employee_login(request):
+    if request.method == 'POST':
+        password = request.POST.get('password', '')
+        # Find employee by password (up to 4 characters)
+        try:
+            employee = Employee.objects.get(password=password)
+            request.session['employee_id'] = employee.id
+            request.session['employee_name'] = employee.full_name
+            request.session['employee_position'] = employee.position
+            messages.success(request, f"Добро пожаловать, {employee.full_name}!")
+            return redirect('home')
+        except Employee.DoesNotExist:
+            messages.error(request, "Неверный пароль")
+            return render(request, 'surveys/login.html')
+    
+    return render(request, 'surveys/login.html')
+
+
+def employee_logout(request):
+    request.session.pop('employee_id', None)
+    request.session.pop('employee_name', None)
+    request.session.pop('employee_position', None)
+    messages.success(request, "Вы вышли из системы")
+    return redirect('home')
+
+
+def get_current_employee(request):
+    """Helper function to get current employee from session"""
+    employee_id = request.session.get('employee_id')
+    if employee_id:
+        try:
+            return Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return None
+    return None
+
+
+def is_moderator(request):
+    """Check if current user is a moderator (for now, employees with 'moderator' in position)"""
+    employee = get_current_employee(request)
+    if employee:
+        return 'модератор' in employee.position.lower() or 'moderator' in employee.position.lower()
+    return False
+
+
 # === ФУНКЦИЯ ЗАГРУЗКИ КЛИЕНТОВ (восстановлена!) ===
 
 def upload_clients(request):
@@ -133,15 +183,20 @@ def upload_clients(request):
     return render(request, 'surveys/upload_clients.html')
 
 
-# === ОСТАЛЬНЫЕ VIEW (без изменений) ===
+# === ОСТАЛЬНЫЕ VIEW (обновленные) ===
 
 def create_photo_report(request):
+    # Check if user is logged in as employee
+    employee = get_current_employee(request)
+    if not employee:
+        messages.error(request, "Для создания фотоотчета необходимо войти в систему")
+        return redirect('home')
+    
     if request.method == 'POST':
         client_id = request.POST.get('client_id')
         stand_count = request.POST.get('stand_count')
         address = request.POST.get('address', '')
         client = get_object_or_404(Client, id=client_id)
-        employee = get_object_or_404(Employee, id=request.POST.get('employee_id'))
 
         report = PhotoReport.objects.create(
             client=client,
@@ -162,18 +217,22 @@ def create_photo_report(request):
             )
 
         messages.success(request, "Фотоотчёт отправлен на проверку!")
-        return redirect('home')
+        return redirect('my_photo_tasks')
 
-    clients = Client.objects.all()
-    employees = Employee.objects.all()
+    clients = Client.objects.filter(employee=employee)  # Only clients assigned to this employee
     return render(request, 'surveys/create_photo_report.html', {
         'clients': clients,
-        'employees': employees,
+        'current_employee': employee,
     })
 
 
 def pending_photo_reports(request):
     """Модератор: список отчётов на проверку + назначенные"""
+    # Only accessible to moderators
+    if not is_moderator(request):
+        messages.error(request, "Доступ запрещен")
+        return redirect('home')
+    
     # Отчёты, отправленные сотрудниками (status='submitted')
     submitted_reports = PhotoReport.objects.filter(status='submitted')
     # Отчёты, назначенные модератором (status='draft' и assigned_to не None)
@@ -187,21 +246,28 @@ def pending_photo_reports(request):
 
 
 def review_photo_report(request, report_id):
+    # Only accessible to moderators
+    if not is_moderator(request):
+        messages.error(request, "Доступ запрещен")
+        return redirect('home')
+    
     report = get_object_or_404(PhotoReport, id=report_id)
     if request.method == 'POST':
         action = request.POST.get('action')
+        current_employee = get_current_employee(request)
         if action == 'approve':
             report.status = 'approved'
-            report.moderator = get_object_or_404(Employee, id=request.POST.get('moderator_id'))
+            report.moderator = current_employee
             report.save()
             messages.success(request, "Отчёт принят!")
         elif action == 'reject':
             report.status = 'rejected'
             report.rejected_reason = request.POST.get('reason')
-            report.moderator = get_object_or_404(Employee, id=request.POST.get('moderator_id'))
+            report.moderator = current_employee
             report.save()
             messages.warning(request, "Отчёт возвращён на доработку.")
         return redirect('pending_photo_reports')
+    
     moderators = Employee.objects.all()
     return render(request, 'surveys/review_report.html', {
         'report': report,
@@ -213,6 +279,11 @@ def review_photo_report(request, report_id):
 
 def assign_photo_report(request):
     """Модератор назначает задачу на фотоотчёт"""
+    # Only accessible to moderators
+    if not is_moderator(request):
+        messages.error(request, "Доступ запрещен")
+        return redirect('home')
+    
     if request.method == 'POST':
         client_id = request.POST.get('client_id')
         assigned_to_id = request.POST.get('assigned_to_id')
@@ -245,18 +316,27 @@ def assign_photo_report(request):
 
 
 def my_rejected_reports(request):
-    reports = PhotoReport.objects.filter(status='rejected')
+    employee = get_current_employee(request)
+    if not employee:
+        messages.error(request, "Для просмотра отчетов необходимо войти в систему")
+        return redirect('home')
+    
+    reports = PhotoReport.objects.filter(employee=employee, status='rejected')
     return render(request, 'surveys/my_rejected_reports.html', {'reports': reports})
 
 
 def fill_survey(request, survey_id):
     survey = get_object_or_404(Survey, id=survey_id, is_active=True)
-    clients = Client.objects.all()
-    employees = Employee.objects.all()
+    employee = get_current_employee(request)
+    if not employee:
+        messages.error(request, "Для заполнения анкеты необходимо войти в систему")
+        return redirect('home')
+    
+    clients = Client.objects.filter(employee=employee)  # Only clients assigned to this employee
 
     if request.method == 'POST':
-        employee = Employee.objects.get(id=request.POST['employee_id'])
-        client = Client.objects.get(id=request.POST['client_id'])
+        client_id = request.POST.get('client_id')
+        client = get_object_or_404(Client, id=client_id)
 
         for question in survey.questions.all():
             response = Response.objects.create(
@@ -297,7 +377,7 @@ def fill_survey(request, survey_id):
     return render(request, 'surveys/fill_survey.html', {
         'survey': survey,
         'clients': clients,
-        'employees': employees,
+        'current_employee': employee,
     })
 
 
@@ -346,14 +426,19 @@ def aggregate_responses(responses_qs):
 
 
 def results_overview(request):
+    employee = get_current_employee(request)
+    if not employee:
+        messages.error(request, "Для просмотра статистики необходимо войти в систему")
+        return redirect('home')
+    
     surveys = Survey.objects.all()
-    clients = Client.objects.all()
-    employees = Employee.objects.all()
+    clients = Client.objects.filter(employee=employee)  # Only client for this employee
+    all_employees = Employee.objects.all()  # All employees for company stats
 
     last_survey_id = Response.objects.order_by('-submitted_at').values_list('survey_id', flat=True).first()
     survey_id = request.GET.get('survey') or last_survey_id
     client_id = request.GET.get('client')
-    employee_id = request.GET.get('employee')
+    employee_filter_id = request.GET.get('employee')  # For filtering by employee
     view_mode = request.GET.get('view', 'detail')
 
     if not survey_id:
@@ -366,8 +451,11 @@ def results_overview(request):
 
         if client_id:
             responses = responses.filter(client_id=client_id)
-        if employee_id:
-            responses = responses.filter(employee_id=employee_id)
+        if employee_filter_id:
+            responses = responses.filter(employee_id=employee_filter_id)
+        else:
+            # Default: show current employee's responses or all if viewing company stats
+            responses = responses.filter(employee=employee)  # Show current employee's responses
 
         grouped_responses = {}
         for resp in responses:
@@ -383,11 +471,17 @@ def results_overview(request):
             grouped_responses[key]['answers'].append(resp)
 
         my_stats_json = company_stats_json = None
-        if employee_id:
-            my_qs = Response.objects.filter(survey_id=survey_id, employee_id=employee_id)
+        if employee_filter_id:
+            my_qs = Response.objects.filter(survey_id=survey_id, employee_id=employee_filter_id)
+            my_stats = aggregate_responses(my_qs)
+            my_stats_json = json.dumps(my_stats, cls=DjangoJSONEncoder)
+        else:
+            # Show current employee's stats by default
+            my_qs = Response.objects.filter(survey_id=survey_id, employee=employee)
             my_stats = aggregate_responses(my_qs)
             my_stats_json = json.dumps(my_stats, cls=DjangoJSONEncoder)
 
+        # Company stats (all employees)
         all_qs = Response.objects.filter(survey_id=survey_id)
         company_stats = aggregate_responses(all_qs)
         company_stats_json = json.dumps(company_stats, cls=DjangoJSONEncoder)
@@ -395,55 +489,87 @@ def results_overview(request):
     context = {
         'surveys': surveys,
         'clients': clients,
-        'employees': employees,
+        'employees': all_employees,
         'grouped_responses': grouped_responses.values(),
         'my_stats_json': my_stats_json,
         'company_stats_json': company_stats_json,
         'selected_survey': int(survey_id) if survey_id else None,
         'selected_client': int(client_id) if client_id else None,
-        'selected_employee': int(employee_id) if employee_id else None,
+        'selected_employee': int(employee_filter_id) if employee_filter_id else None,
         'view_mode': view_mode,
+        'current_employee': employee,
     }
     return render(request, 'surveys/results_overview.html', context)
 
 
 # surveys/views.py — убедись, что в home есть:
 def home(request):
+    current_employee = get_current_employee(request)
+    
     surveys = Survey.objects.filter(is_active=True)
     surveys_with_progress = []
     for survey in surveys:
-        completed = Response.objects.filter(survey=survey).count()
+        if current_employee:
+            # Show progress for current employee's assigned clients
+            completed = Response.objects.filter(survey=survey, employee=current_employee).count()
+        else:
+            completed = Response.objects.filter(survey=survey).count()
         target = survey.target_count
         surveys_with_progress.append({
             'survey': survey,
             'target': target,
             'completed': completed,
         })
+    
     return render(request, 'surveys/home.html', {
         'surveys_with_progress': surveys_with_progress,
-        'user_is_moderator': request.user.is_staff,  # ← ВАЖНО: нужно для условий в шаблоне
+        'current_employee': current_employee,
+        'user_is_moderator': is_moderator(request),
     })
+
 
 def my_photo_tasks(request):
     """Сотрудник: список назначенных ему задач и отправленных отчётов"""
-    # Получаем текущего сотрудника (временно — по ID из сессии или параметру)
-    # В будущем: request.user.employee
-    employee_id = request.GET.get('employee_id')
-    if not employee_id:
-        # Пока просто берем первого сотрудника для демонстрации
-        employee = Employee.objects.first()
-    else:
-        employee = get_object_or_404(Employee, id=employee_id)
-
+    employee = get_current_employee(request)
     if not employee:
-        return render(request, 'surveys/my_photo_tasks.html', {'tasks': []})
+        messages.error(request, "Для просмотра задач необходимо войти в систему")
+        return redirect('home')
 
-    # Назначенные задачи (статус draft)
+    # Назначенные задачи (статус draft и assigned_to = текущий сотрудник)
     assigned_tasks = PhotoReport.objects.filter(assigned_to=employee, status='draft')
-    # Отправленные отчёты (статус submitted или rejected)
+    # Отправленные отчёты (статус submitted или rejected, created by current employee)
     my_reports = PhotoReport.objects.filter(employee=employee).exclude(status='draft')
 
     all_tasks = (assigned_tasks | my_reports).distinct().order_by('-created_at')
     return render(request, 'surveys/my_photo_tasks.html', {
         'tasks': all_tasks,
+        'current_employee': employee,
+    })
+
+
+def view_photo_report(request, report_id):
+    """Просмотр фотоотчёта с фото"""
+    employee = get_current_employee(request)
+    if not employee:
+        messages.error(request, "Для просмотра отчёта необходимо войти в систему")
+        return redirect('home')
+
+    report = get_object_or_404(PhotoReport, id=report_id)
+    
+    # Check if user can view this report (either they created it, or they are assigned to it, or they are a moderator)
+    can_view = (
+        report.employee == employee or 
+        report.assigned_to == employee or 
+        is_moderator(request)
+    )
+    
+    if not can_view:
+        messages.error(request, "У вас нет доступа к этому отчёту")
+        return redirect('my_photo_tasks')
+
+    photos = report.photos.all()
+    return render(request, 'surveys/view_photo_report.html', {
+        'report': report,
+        'photos': photos,
+        'current_employee': employee,
     })

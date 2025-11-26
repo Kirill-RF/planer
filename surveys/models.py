@@ -80,6 +80,7 @@ class Holding(models.Model):
 class Employee(models.Model):
     full_name = models.CharField(max_length=255, verbose_name="ФИО сотрудника")
     position = models.CharField(max_length=200, blank=True)
+    password = models.CharField(max_length=4, verbose_name="Пароль (до 4 символов)", blank=True, help_text="Пароль для аутентификации сотрудника (до 4 символов)")
 
     def __str__(self):
         return self.full_name
