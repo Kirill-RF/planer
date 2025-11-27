@@ -7,6 +7,10 @@ import os
 from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.http import HttpResponseForbidden
 from .models import Survey, Question, Option, Client, Employee, Response, Holding
 from collections import defaultdict
 
@@ -152,6 +156,7 @@ def upload_clients(request):
     return render(request, 'surveys/upload_clients.html')
 
 
+@login_required
 def fill_survey(request, survey_id):
     survey = get_object_or_404(Survey, id=survey_id, is_active=True)
     clients = Client.objects.all()
@@ -248,6 +253,7 @@ def aggregate_responses(responses_qs):
     return chart_data
 
 
+@login_required
 def results_overview(request):
     surveys = Survey.objects.all()
     clients = Client.objects.all()
@@ -321,9 +327,22 @@ def home(request):
             'target': target,
             'completed': completed,
         })
+    
+    # Проверяем, является ли пользователь модератором (администратором)
+    user_is_moderator = request.user.is_staff
+    
+    # Также проверяем, является ли пользователь связанным сотрудником
+    user_is_employee = False
+    try:
+        employee = Employee.objects.get(user=request.user)
+        user_is_employee = True
+    except Employee.DoesNotExist:
+        pass
+    
     return render(request, 'surveys/home.html', {
         'surveys_with_progress': surveys_with_progress,
-        'user_is_moderator': request.user.is_staff,  # нужно для кнопок
+        'user_is_moderator': user_is_moderator,
+        'user_is_employee': user_is_employee,
     })
 
 
@@ -333,6 +352,7 @@ from .utils import is_high_quality_image
 from .models import PhotoReport, Photo, ModeratorComment
 import os
 
+@login_required
 def create_photo_report(request):
     """Сотрудник создаёт фотоотчёт"""
     if request.method == 'POST':
@@ -381,12 +401,14 @@ def create_photo_report(request):
     })
 
 
+@login_required
 def pending_photo_reports(request):
     """Модератор: список отчётов на проверку"""
     reports = PhotoReport.objects.filter(status='submitted')
     return render(request, 'surveys/pending_reports.html', {'reports': reports})
 
 
+@login_required
 def review_photo_report(request, report_id):
     """Модератор: проверка отчёта"""
     report = get_object_or_404(PhotoReport, id=report_id)
@@ -411,8 +433,50 @@ def review_photo_report(request, report_id):
     })
 
 
+@login_required
 def my_rejected_reports(request):
     """Сотрудник: список отчётов на доработку"""
     # В будущем можно фильтровать по request.user.employee
     reports = PhotoReport.objects.filter(status='rejected')
     return render(request, 'surveys/my_rejected_reports.html', {'reports': reports})
+
+
+# === АУТЕНТИФИКАЦИЯ СОТРУДНИКОВ ===
+
+def employee_login(request):
+    """Аутентификация сотрудника"""
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            # Проверяем, связан ли пользователь с сотрудником
+            try:
+                employee = Employee.objects.get(user=user)
+                login(request, user)
+                next_url = request.GET.get('next', 'home')
+                return redirect(next_url)
+            except Employee.DoesNotExist:
+                messages.error(request, 'Пользователь не связан с сотрудником')
+        else:
+            messages.error(request, 'Неверный логин или пароль')
+    
+    return render(request, 'surveys/login.html')
+
+
+def employee_logout(request):
+    """Выход сотрудника"""
+    logout(request)
+    return redirect('home')
+
+
+@login_required
+def profile(request):
+    """Страница профиля сотрудника"""
+    try:
+        employee = Employee.objects.get(user=request.user)
+    except Employee.DoesNotExist:
+        employee = None
+    
+    return render(request, 'surveys/profile.html', {'employee': employee})

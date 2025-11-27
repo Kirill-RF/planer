@@ -20,4 +20,9 @@ urlpatterns = [
     path('photo-report/pending/', views.pending_photo_reports, name='pending_photo_reports'),
     path('photo-report/review/<int:report_id>/', views.review_photo_report, name='review_photo_report'),
     path('photo-report/rejected/', views.my_rejected_reports, name='my_rejected_reports'),
+
+    # === URL ДЛЯ АУТЕНТИФИКАЦИИ ===
+    path('login/', views.employee_login, name='employee_login'),
+    path('logout/', views.employee_logout, name='employee_logout'),
+    path('profile/', views.profile, name='profile'),
 ]
