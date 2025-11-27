@@ -328,16 +328,20 @@ def home(request):
             'completed': completed,
         })
     
+    # Проверяем, является ли пользователь аутентифицированным
+    user_is_authenticated = request.user.is_authenticated
+    
     # Проверяем, является ли пользователь модератором (администратором)
-    user_is_moderator = request.user.is_staff
+    user_is_moderator = user_is_authenticated and request.user.is_staff
     
     # Также проверяем, является ли пользователь связанным сотрудником
     user_is_employee = False
-    try:
-        employee = Employee.objects.get(user=request.user)
-        user_is_employee = True
-    except Employee.DoesNotExist:
-        pass
+    if user_is_authenticated:
+        try:
+            employee = Employee.objects.get(user=request.user)
+            user_is_employee = True
+        except Employee.DoesNotExist:
+            pass
     
     return render(request, 'surveys/home.html', {
         'surveys_with_progress': surveys_with_progress,

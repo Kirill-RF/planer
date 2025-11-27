@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Профиль сотрудника{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Профиль сотрудника</h3>
+                </div>
+                <div class="card-body">
+                    {% if employee %}
+                        <p><strong>ФИО:</strong> {{ employee.full_name }}</p>
+                        <p><strong>Должность:</strong> {{ employee.position }}</p>
+                        <p><strong>Отдел:</strong> {{ employee.department }}</p>
+                        <p><strong>Телефон:</strong> {{ employee.phone }}</p>
+                        <p><strong>Email:</strong> {{ employee.email }}</p>
+                        <p><strong>Дата начала работы:</strong> {{ employee.start_date }}</p>
+                    {% else %}
+                        <p>Информация о сотруднике недоступна.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
