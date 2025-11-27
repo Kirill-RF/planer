@@ -34,7 +34,7 @@ def create_employee_users():
             # Создаем нового пользователя
             user = User.objects.create_user(
                 username=username,
-                password='default_password',  # В реальном приложении нужно использовать более безопасный пароль
+                password='pwd1',  # 4-символьный пароль для сотрудников
                 is_staff=False  # Сотрудники не являются администраторами по умолчанию
             )
             
