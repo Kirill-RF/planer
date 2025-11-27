@@ -4,7 +4,7 @@
 {% block content %}
 <h1>Доступные задачи</h1>
 
-{% if surveys_with_progress %}
+{% if surveys_with_progress or photo_reports_to_review %}
   <ul class="list-group">
     {% for item in surveys_with_progress %}
       <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -28,9 +28,45 @@
         </div>
       </li>
     {% endfor %}
+    
+    {% for item in photo_reports_to_review %}
+      {% if item.type == 'photo_report' %}
+        <li class="list-group-item d-flex justify-content-between align-items-center" style="background-color: #e7f3ff;">
+          <div>
+            📸 Фотоотчёт: {{ item.report.client.full_name }}
+            <br>
+            <small class="text-muted">
+              Статус: <strong>{{ item.report.get_status_display }}</strong>
+              {% if item.report.rejected_reason %}
+                | Причина возврата: {{ item.report.rejected_reason }}
+              {% endif %}
+            </small>
+          </div>
+          <div>
+            {% if user.is_staff %}
+              <!-- Модератор -->
+              <a href="{% url 'review_photo_report' item.report.id %}" class="btn btn-sm btn-outline-warning me-2">
+                Проверить
+              </a>
+            {% else %}
+              <!-- Сотрудник -->
+              {% if item.report.status == 'rejected' %}
+                <a href="{% url 'create_photo_report' %}" class="btn btn-sm btn-outline-success me-2">
+                  Пересдать
+                </a>
+              {% else %}
+                <a href="{% url 'create_photo_report' %}" class="btn btn-sm btn-outline-primary me-2">
+                  Заполнить
+                </a>
+              {% endif %}
+            {% endif %}
+          </div>
+        </li>
+      {% endif %}
+    {% endfor %}
   </ul>
 {% else %}
-  <div class="alert alert-warning">Нет активных анкет.</div>
+  <div class="alert alert-warning">Нет активных задач.</div>
 {% endif %}
 
 <!-- Добавляем кнопки для фотоотчётов -->

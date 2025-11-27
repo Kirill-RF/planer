@@ -326,7 +326,40 @@ def home(request):
             'survey': survey,
             'target': target,
             'completed': completed,
+            'type': 'survey'  # Добавляем тип для различия
         })
+    
+    # Получаем фотоотчеты, которые требуют действия
+    photo_reports_to_review = []
+    if request.user.is_authenticated:
+        try:
+            employee = Employee.objects.get(user=request.user)
+            # Получаем фотоотчеты, требующие действия
+            if request.user.is_staff:  # Модератор
+                # Модератор видит отчеты, отправленные на проверку
+                pending_reports = PhotoReport.objects.filter(status='submitted')
+            else:  # Сотрудник
+                # Сотрудник видит свои отчеты, которые требуют действия (на доработке или черновики)
+                pending_reports = PhotoReport.objects.filter(
+                    employee=employee,
+                    status__in=['rejected', 'draft']  # Отчеты на доработке или черновики
+                )
+            
+            for report in pending_reports:
+                photo_reports_to_review.append({
+                    'report': report,
+                    'type': 'photo_report'
+                })
+        except Employee.DoesNotExist:
+            # Если пользователь не связан с сотрудником, но является модератором, 
+            # все равно показываем отчеты на проверке
+            if request.user.is_staff:  # Модератор
+                pending_reports = PhotoReport.objects.filter(status='submitted')
+                for report in pending_reports:
+                    photo_reports_to_review.append({
+                        'report': report,
+                        'type': 'photo_report'
+                    })
     
     # Проверяем, является ли пользователь аутентифицированным
     user_is_authenticated = request.user.is_authenticated
@@ -345,6 +378,7 @@ def home(request):
     
     return render(request, 'surveys/home.html', {
         'surveys_with_progress': surveys_with_progress,
+        'photo_reports_to_review': photo_reports_to_review,
         'user_is_moderator': user_is_moderator,
         'user_is_employee': user_is_employee,
     })
