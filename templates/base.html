@@ -37,7 +37,9 @@
           <span class="navbar-text text-white me-3">
             👤 {{ user.username }}
           </span>
-          <a class="btn btn-outline-light btn-sm" href="{% url 'admin:logout' %}">Выйти</a>
+          <a class="btn btn-outline-light btn-sm" href="{% url 'employee_logout' %}">Выйти</a>
+        {% else %}
+          <a class="btn btn-outline-light btn-sm" href="{% url 'employee_login' %}">Войти</a>
         {% endif %}
       </div>
     </div>
