@@ -159,11 +159,13 @@ class SurveyResponseForm(forms.Form):
                     
                 elif question.question_type == 'PHOTO':
                     if answer_data:
-                        SurveyAnswerPhoto.objects.create(
-                            answer=survey_answer,
-                            photo=answer_data
-                        )
-                
+                        # Сохраняем все загруженные фото
+                        uploaded_files = self.files.getlist(field_name)
+                        for photo_file in uploaded_files[:10]:  # Ограничение до 10 фото
+                            SurveyAnswerPhoto.objects.create(
+                                answer=survey_answer,
+                                photo=photo_file
+                            )
                 survey_answer.save()
                 
 class AddPhotosForm(forms.Form):
@@ -174,4 +176,13 @@ class AddPhotosForm(forms.Form):
         label=_('Дополнительные фото'),
         required=True,
         help_text=_('Можно добавить до 10 фото в общей сложности')
+        # УДАЛЕНО: widget=forms.FileInput(attrs={'multiple': True})
+    )
+    
+class AddSinglePhotoForm(forms.Form):
+    """Форма для добавления одного фото к ответу."""
+    photo = forms.ImageField(
+        label=_('Фото'),
+        required=True,
+        help_text=_('Добавьте одно фото')
     )

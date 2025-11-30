@@ -491,3 +491,29 @@ class SurveyClientAssignment(models.Model):
         verbose_name = _('Назначение клиента к анкете')
         verbose_name_plural = _('Назначения клиентов к анкетам')
         unique_together = ('task', 'client', 'employee')
+        
+# tasks/models.py - добавьте в конец файла
+
+class TaskStatistics(models.Model):
+    """
+    Модель для хранения агрегированной статистики по задачам.
+    Используется для создания отчетов и дашбордов.
+    """
+    task = models.ForeignKey(
+        'Task',
+        on_delete=models.CASCADE,
+        verbose_name=_('Задача')
+    )
+    total_responses = models.PositiveIntegerField(_('Всего ответов'), default=0)
+    unique_clients = models.PositiveIntegerField(_('Уникальных клиентов'), default=0)
+    completion_rate = models.FloatField(_('Процент выполнения'), default=0.0)
+    created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('Обновлено'), auto_now=True)
+    
+    class Meta:
+        verbose_name = _('Статистика задачи')
+        verbose_name_plural = _('Статистика задач')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Статистика: {self.task.title}"

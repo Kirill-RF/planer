@@ -14,11 +14,15 @@ from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.translation import gettext as _
-from .forms import SurveyResponseForm, AddPhotosForm
+from .forms import SurveyResponseForm, AddPhotosForm, AddSinglePhotoForm
 from .models import Task, TaskStatus, TaskType
 from users.models import CustomUser
-from django.db.models import Count, Q
 from .models import SurveyAnswer, SurveyQuestion, SurveyAnswerPhoto
+from clients.models import Client
+
+from django.db.models import Count, Sum, Avg, Q
+from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
 
 class TaskListView(LoginRequiredMixin, ListView):
     """
@@ -115,14 +119,28 @@ class SurveyResponseView(LoginRequiredMixin, FormView):
         kwargs['user'] = self.request.user
         return kwargs
     
+    # В SurveyResponseView метод form_valid
+
     def form_valid(self, form):
         form.save()
         task = form.task
-        task.status = TaskStatus.ON_CHECK
-        if task.task_type == TaskType.SURVEY:
+        
+        # Для фотоотчетов — статус "На проверке"
+        if task.task_type in [TaskType.EQUIPMENT_PHOTO, TaskType.SIMPLE_PHOTO]:
+            task.status = TaskStatus.ON_CHECK
+            task.is_active = False  # Фотоотчет становится неактивным после отправки
+        
+        # Для анкет — увеличиваем счетчик, но остаемся активными
+        elif task.task_type == TaskType.SURVEY:
             task.current_count += 1
+            # Проверяем, достигнут ли план
+            if task.target_count > 0 and task.current_count >= task.target_count:
+                task.status = TaskStatus.ON_CHECK
+                task.is_active = False  # Анкета становится неактивной только при достижении плана
+            # Иначе остаемся в статусе SENT и активными
+        
         task.save()
-        messages.success(self.request, _("Анкета успешно заполнена! Ожидайте проверки модератора."))
+        messages.success(self.request, _("Анкета успешно заполнена!"))
         return redirect('tasks:task_list')
     
     def get_context_data(self, **kwargs):
@@ -229,3 +247,234 @@ class AddPhotosView(LoginRequiredMixin, FormView):
         
         messages.success(self.request, _(f"Успешно добавлено {actual_upload_count} фото."))
         return redirect('tasks:survey_results', task_id=answer.question.task.id)
+    
+class AddSinglePhotoView(LoginRequiredMixin, FormView):
+    """View for adding single photo to existing survey answer."""
+    template_name = 'tasks/add_single_photo.html'
+    form_class = AddSinglePhotoForm
+    
+    def get_answer(self):
+        answer_id = self.kwargs['answer_id']
+        return get_object_or_404(SurveyAnswer, id=answer_id)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        answer = self.get_answer()
+        context['answer'] = answer
+        return context
+    
+    def form_valid(self, form):
+        answer = self.get_answer()
+        if answer.photos.count() >= 10:
+            messages.error(self.request, _("Максимальное количество фото (10) уже достигнуто."))
+            return self.form_invalid(form)
+        
+        # Создаем новое фото
+        SurveyAnswerPhoto.objects.create(
+            answer=answer,
+            photo=form.cleaned_data['photo']
+        )
+        
+        messages.success(self.request, _("Фото успешно добавлено."))
+        return redirect('tasks:survey_results', task_id=answer.question.task.id)
+    
+    
+class MySurveysView(LoginRequiredMixin, ListView):
+    """
+    View for displaying all surveys filled by employee.
+    """
+    template_name = 'tasks/my_surveys.html'
+    context_object_name = 'surveys'
+    
+    def get_queryset(self):
+        # Получаем все анкеты, где сотрудник участвовал
+        return Task.objects.filter(
+            task_type=TaskType.SURVEY,
+            answers__user=self.request.user
+        ).distinct()
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Мои анкеты')
+        return context
+    
+class StatisticsView(LoginRequiredMixin, TemplateView):
+    """
+    Главная страница статистики с фильтрами и визуализацией.
+    """
+    template_name = 'tasks/statistics.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Статистика задач')
+        
+        # Фильтры
+        filters = self.request.GET
+        
+        # Базовый QuerySet
+        tasks = Task.objects.all()
+        
+        # Применяем фильтры
+        if 'task_type' in filters and filters['task_type'] != 'all':
+            tasks = tasks.filter(task_type=filters['task_type'])
+            
+        if 'client' in filters and filters['client'] != 'all':
+            tasks = tasks.filter(client_id=filters['client'])
+            
+        if 'employee' in filters and filters['employee'] != 'all':
+            tasks = tasks.filter(assigned_to_id=filters['employee'])
+            
+        if 'moderator' in filters and filters['moderator'] != 'all':
+            tasks = tasks.filter(created_by_id=filters['moderator'])
+            
+        if 'group_client' in filters and filters['group_client'] != 'all':
+            # Здесь можно добавить фильтрацию по группам клиентов
+            pass
+            
+        if 'date_from' in filters:
+            tasks = tasks.filter(created_at__gte=filters['date_from'])
+            
+        if 'date_to' in filters:
+            tasks = tasks.filter(created_at__lte=filters['date_to'])
+        
+        # Статистика по всем задачам
+        context['total_tasks'] = tasks.count()
+        context['completed_tasks'] = tasks.filter(status='COMPLETED').count()
+        context['on_check_tasks'] = tasks.filter(status='ON_CHECK').count()
+        context['sent_tasks'] = tasks.filter(status='SENT').count()
+        
+        # Статистика по типам задач
+        context['survey_tasks'] = tasks.filter(task_type='SURVEY').count()
+        context['photo_tasks'] = tasks.filter(task_type__in=['EQUIPMENT_PHOTO', 'SIMPLE_PHOTO']).count()
+        
+        # Статистика по сотрудникам
+        context['employees_stats'] = CustomUser.objects.filter(role='EMPLOYEE').annotate(
+            total_tasks=Count('tasks_assigned'),
+            completed_tasks=Count('tasks_assigned', filter=Q(tasks_assigned__status='COMPLETED')),
+            on_check_tasks=Count('tasks_assigned', filter=Q(tasks_assigned__status='ON_CHECK'))
+        ).order_by('-total_tasks')
+        
+        # Статистика по клиентам
+        context['clients_stats'] = Client.objects.annotate(
+            total_tasks=Count('tasks'),
+            completed_tasks=Count('tasks', filter=Q(tasks__status='COMPLETED')),
+            on_check_tasks=Count('tasks', filter=Q(tasks__status='ON_CHECK'))
+        ).order_by('-total_tasks')
+        
+        # Статистика по анкетам
+        survey_tasks = tasks.filter(task_type='SURVEY')
+        context['survey_statistics'] = []
+        
+        for task in survey_tasks:
+            total_answers = SurveyAnswer.objects.filter(question__task=task).count()
+            unique_clients = SurveyAnswer.objects.filter(question__task=task).values('client').distinct().count()
+            completion_rate = 0
+            
+            if task.target_count > 0:
+                completion_rate = min(100, int((task.current_count / task.target_count) * 100))
+            
+            context['survey_statistics'].append({
+                'task': task,
+                'total_answers': total_answers,
+                'unique_clients': unique_clients,
+                'completion_rate': completion_rate
+            })
+        
+        # График для первой анкеты
+        if context['survey_statistics']:
+            first_survey = context['survey_statistics'][0]
+            context['first_survey_chart_data'] = self.get_chart_data(first_survey['task'])
+        
+        return context
+    
+    def get_chart_data(self, task):
+        """Получает данные для графика по первой анкете."""
+        data = {
+            'labels': [],
+            'datasets': [{
+                'label': 'Количество ответов',
+                'data': [],
+                'backgroundColor': [
+                    'rgba(255, 99, 132, 0.2)',
+                    'rgba(54, 162, 235, 0.2)',
+                    'rgba(255, 206, 86, 0.2)',
+                    'rgba(75, 192, 192, 0.2)',
+                    'rgba(153, 102, 255, 0.2)',
+                    'rgba(255, 159, 64, 0.2)'
+                ],
+                'borderColor': [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(153, 102, 255, 1)',
+                    'rgba(255, 159, 64, 1)'
+                ],
+                'borderWidth': 1
+            }]
+        }
+        
+        # Получаем все вопросы анкеты
+        questions = task.questions.all()
+        
+        for question in questions:
+            data['labels'].append(question.question_text[:30])
+            answers_count = SurveyAnswer.objects.filter(question=question).count()
+            data['datasets'][0]['data'].append(answers_count)
+        
+        return data
+    
+def survey_statistics_view(self, request, task_id):
+    """View for detailed survey statistics."""
+    task = get_object_or_404(Task, id=task_id)
+    
+    # Общая статистика
+    total_responses = SurveyAnswer.objects.filter(question__task=task).count()
+    unique_clients = SurveyAnswer.objects.filter(question__task=task).values('client').distinct().count()
+    
+    # Статистика по вопросам
+    questions_stats = []
+    for question in task.questions.all():
+        question_stats = {
+            'question': question,
+            'total_answers': SurveyAnswer.objects.filter(question=question).count()
+        }
+        
+        if question.has_custom_choices():
+            choice_stats = []
+            for choice in question.choices.all():
+                count = SurveyAnswer.objects.filter(
+                    question=question,
+                    selected_choices=choice
+                ).count()
+                percentage = (count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                choice_stats.append({
+                    'choice': choice,
+                    'count': count,
+                    'percentage': round(percentage, 1)
+                })
+            question_stats['choice_stats'] = choice_stats
+        else:
+            # Для текстовых ответов
+            text_answers = SurveyAnswer.objects.filter(
+                question=question
+            ).exclude(text_answer__isnull=True).exclude(text_answer='')
+            question_stats['text_answers_count'] = text_answers.count()
+            
+            # Для фото вопросов - добавляем список ответов с фото
+            if question.question_type == 'PHOTO':
+                question_stats['answers_with_photos'] = SurveyAnswer.objects.filter(
+                    question=question
+                ).prefetch_related('photos')
+        
+        questions_stats.append(question_stats)
+    
+    context = {
+        'title': f'Статистика: {task.title}',
+        'task': task,
+        'total_responses': total_responses,
+        'unique_clients': unique_clients,
+        'questions_stats': questions_stats,
+        'opts': self.model._meta,
+    }
+    return render(request, 'admin/tasks/survey_statistics.html', context)

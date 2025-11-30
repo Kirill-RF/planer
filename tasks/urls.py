@@ -1,5 +1,4 @@
 # tasks/urls.py
-
 from django.urls import path
 from . import views
 
@@ -10,5 +9,12 @@ urlpatterns = [
     path('<int:pk>/', views.TaskDetailView.as_view(), name='task_detail'),
     path('survey/<int:task_id>/', views.SurveyResponseView.as_view(), name='survey_response'),
     path('survey/<int:task_id>/results/', views.SurveyResultsView.as_view(), name='survey_results'),
-    path('answer/<int:answer_id>/add-photos/', views.AddPhotosView.as_view(), name='add_photos'),  # ДОБАВЬТЕ ЭТУ СТРОКУ
+    path('answer/<int:answer_id>/add-photos/', views.AddPhotosView.as_view(), name='add_photos'),  
+    path('answer/<int:answer_id>/add-single-photo/', views.AddSinglePhotoView.as_view(), name='add_single_photo'),
+    path('my-surveys/', views.MySurveysView.as_view(), name='my_surveys'),
+    path('statistics/', views.StatisticsView.as_view(), name='statistics'),
+    # tasks/urls.py - убедитесь, что маршрут существует
+    # path('survey-stats/<int:task_id>/', 
+    #      views.TaskAdmin.as_view().admin_site.admin_view(views.TaskAdmin.survey_statistics_view), 
+    #      name='survey_statistics'),
 ]

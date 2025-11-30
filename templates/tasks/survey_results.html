@@ -17,15 +17,16 @@
                         <!-- Существующий код для статистики -->
                         
                         <!-- Добавляем кнопку для добавления фото -->
-                        {% if result.question.question_type == 'PHOTO' %}
-                            {% for answer in result.question.answers.all %}
-                                {% if answer.photos.count < 10 %}
-                                    <a href="{% url 'tasks:add_photos' answer.id %}" class="btn btn-sm btn-secondary">
-                                        {% trans 'Добавить ещё фото' %}
-                                    </a>
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
+
+						{% if result.question.question_type == 'PHOTO' %}
+							{% for answer in result.question.answers.all %}
+								{% if answer.photos.count < 10 %}
+									<a href="{% url 'tasks:add_single_photo' answer.id %}" class="btn btn-sm btn-secondary mt-2">
+										{% trans 'Добавить ещё фото' %}
+									</a>
+								{% endif %}
+							{% endfor %}
+						{% endif %}
                     </div>
                 </div>
             {% endfor %}
