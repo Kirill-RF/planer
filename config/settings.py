@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'tasks',  # Our main app for tasks
     'clients',  # App for client management
     'reports',  # App for reports and statistics
+    'nested_admin',
 ]
 
 MIDDLEWARE = [
@@ -172,4 +173,10 @@ LOCALE_PATHS = [
 
 LANGUAGES = [
     ('ru', 'Russian'),
+]
+
+STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
 ]

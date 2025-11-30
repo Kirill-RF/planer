@@ -1,16 +1,13 @@
 # tasks/forms.py
-
 from django import forms
-from django.utils.translation import gettext_lazy as _  # Добавьте этот импорт!
-from .models import SurveyAnswer, SurveyQuestion, Client, SurveyQuestionChoice
+from django.utils.translation import gettext_lazy as _ 
+from .models import SurveyAnswer, SurveyAnswerPhoto, SurveyQuestion, Client, SurveyQuestionChoice
 from users.models import CustomUser
 
 class SurveyResponseForm(forms.Form):
     """
-    Форма для заполнения анкеты с динамическими полями.
-    
-    Автоматически создает поля на основе вопросов в задаче,
-    включая выбор клиента и обработку разных типов ответов.
+    Форма для заполнения анкеты с одиночной загрузкой фото.
+    Для множественной загрузки используется JavaScript.
     """
     
     def __init__(self, task, user, *args, **kwargs):
@@ -18,8 +15,7 @@ class SurveyResponseForm(forms.Form):
         self.task = task
         self.user = user
         
-        # Добавляем поле выбора клиента
-        if not task.client:  # Если в задаче не указан клиент
+        if not task.client:
             self.fields['selected_client'] = forms.ModelChoiceField(
                 queryset=Client.objects.all(),
                 label=_('Выберите клиента'),
@@ -27,12 +23,11 @@ class SurveyResponseForm(forms.Form):
                 required=True
             )
         
-        # Создаем поля для каждого вопроса
         for question in task.questions.all().order_by('order'):
             field_name = f'question_{question.id}'
             
             if question.question_type == 'RADIO':
-                if question.choices.exists():  # Есть кастомные варианты
+                if question.choices.exists():
                     choices = [(choice.id, choice.choice_text) for choice in question.choices.all()]
                     self.fields[field_name] = forms.ChoiceField(
                         label=question.question_text,
@@ -41,7 +36,6 @@ class SurveyResponseForm(forms.Form):
                         required=True
                     )
                 else:
-                    # Стандартные варианты
                     self.fields[field_name] = forms.ChoiceField(
                         label=question.question_text,
                         choices=[('да', 'Да'), ('нет', 'Нет')],
@@ -50,7 +44,7 @@ class SurveyResponseForm(forms.Form):
                     )
                     
             elif question.question_type == 'CHECKBOX':
-                if question.choices.exists():  # Есть кастомные варианты
+                if question.choices.exists():
                     choices = [(choice.id, choice.choice_text) for choice in question.choices.all()]
                     self.fields[field_name] = forms.MultipleChoiceField(
                         label=question.question_text,
@@ -69,26 +63,62 @@ class SurveyResponseForm(forms.Form):
             elif question.question_type == 'TEXT':
                 self.fields[field_name] = forms.CharField(
                     label=question.question_text,
-                    widget=forms.TextInput(),
-                    required=False
-                )
-                
-            elif question.question_type == 'TEXTAREA':
-                self.fields[field_name] = forms.CharField(
-                    label=question.question_text,
                     widget=forms.Textarea(attrs={'rows': 3}),
                     required=False
                 )
                 
+            elif question.question_type == 'TEXT_SHORT':
+                self.fields[field_name] = forms.CharField(
+                    label=question.question_text,
+                    widget=forms.TextInput(),
+                    required=False,
+                    max_length=20
+                )
+                
+            elif question.question_type == 'SELECT_SINGLE':
+                if question.choices.exists():
+                    choices = [('', '---')] + [(choice.id, choice.choice_text) for choice in question.choices.all()]
+                    self.fields[field_name] = forms.ChoiceField(
+                        label=question.question_text,
+                        choices=choices,
+                        widget=forms.Select(),
+                        required=False
+                    )
+                else:
+                    self.fields[field_name] = forms.ChoiceField(
+                        label=question.question_text,
+                        choices=[('', '---'), ('да', 'Да'), ('нет', 'Нет')],
+                        widget=forms.Select(),
+                        required=False
+                    )
+                    
+            elif question.question_type == 'SELECT_MULTIPLE':
+                if question.choices.exists():
+                    choices = [(choice.id, choice.choice_text) for choice in question.choices.all()]
+                    self.fields[field_name] = forms.MultipleChoiceField(
+                        label=question.question_text,
+                        choices=choices,
+                        widget=forms.SelectMultiple(),
+                        required=False
+                    )
+                else:
+                    self.fields[field_name] = forms.MultipleChoiceField(
+                        label=question.question_text,
+                        choices=[('да', 'Да'), ('нет', 'Нет')],
+                        widget=forms.SelectMultiple(),
+                        required=False
+                    )
+                    
             elif question.question_type == 'PHOTO':
+                # Одиночная загрузка фото
                 self.fields[field_name] = forms.ImageField(
                     label=question.question_text,
-                    required=False
+                    required=False,
+                    help_text=_('Можно загрузить одно фото')
                 )
 
     def save(self):
         """Сохраняет ответы на анкету в базу данных."""
-        # Определяем клиента
         if self.task.client:
             client = self.task.client
         else:
@@ -96,7 +126,6 @@ class SurveyResponseForm(forms.Form):
         
         for question in self.task.questions.all():
             field_name = f'question_{question.id}'
-            
             if field_name in self.cleaned_data:
                 answer_data = self.cleaned_data[field_name]
                 
@@ -106,7 +135,6 @@ class SurveyResponseForm(forms.Form):
                     client=client
                 )
                 
-                # Обработка разных типов вопросов
                 if question.question_type == 'RADIO':
                     if question.choices.exists():
                         if answer_data:
@@ -126,13 +154,24 @@ class SurveyResponseForm(forms.Form):
                         else:
                             survey_answer.text_answer = answer_data or ''
                             
-                elif question.question_type == 'TEXT':
-                    survey_answer.text_answer = answer_data or ''
-                    
-                elif question.question_type == 'TEXTAREA':
+                elif question.question_type in ['TEXT', 'TEXT_SHORT', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
                     survey_answer.text_answer = answer_data or ''
                     
                 elif question.question_type == 'PHOTO':
-                    survey_answer.photo = answer_data
+                    if answer_data:
+                        SurveyAnswerPhoto.objects.create(
+                            answer=survey_answer,
+                            photo=answer_data
+                        )
                 
                 survey_answer.save()
+                
+class AddPhotosForm(forms.Form):
+    """
+    Форма для добавления дополнительных фото к существующему ответу.
+    """
+    photos = forms.FileField(
+        label=_('Дополнительные фото'),
+        required=True,
+        help_text=_('Можно добавить до 10 фото в общей сложности')
+    )

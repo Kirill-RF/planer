@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h2>{% trans 'Статистика задач' %}</h2>
+            
+            <!-- Общая статистика -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">{% trans 'Всего задач' %}</h5>
+                            <p class="card-text">{{ total_tasks }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">{% trans 'Завершено' %}</h5>
+                            <p class="card-text">{{ completed_tasks }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">{% trans 'На проверке' %}</h5>
+                            <p class="card-text">{{ on_check_tasks }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">{% trans 'Отправлено' %}</h5>
+                            <p class="card-text">{{ sent_tasks }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Статистика по типам задач -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">{% trans 'По типам задач' %}</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul>
+                                <li>{% trans 'Анкеты:' %} {{ survey_tasks }}</li>
+                                <li>{% trans 'Фотоотчеты:' %} {{ photo_tasks }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Статистика по сотрудникам -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">{% trans 'По сотрудникам' %}</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>{% trans 'Сотрудник' %}</th>
+                                        <th>{% trans 'Всего' %}</th>
+                                        <th>{% trans 'Завершено' %}</th>
+                                        <th>{% trans 'На проверке' %}</th>
+                                        <th>{% trans 'Отправлено' %}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for emp_stat in employee_stats %}
+                                        <tr>
+                                            <td>{{ emp_stat.employee.username }}</td>
+                                            <td>{{ emp_stat.total }}</td>
+                                            <td>{{ emp_stat.completed }}</td>
+                                            <td>{{ emp_stat.on_check }}</td>
+                                            <td>{{ emp_stat.sent }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <a href="{% url 'tasks:task_list' %}" class="btn btn-secondary">{% trans 'Назад к списку задач' %}</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

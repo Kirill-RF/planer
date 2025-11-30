@@ -17,6 +17,7 @@
                                 <th>{% trans 'Тип' %}</th>
                                 <th>{% trans 'Статус' %}</th>
                                 <th>{% trans 'Клиент' %}</th>
+                                <th>{% trans 'План/Выполнено' %}</th>
                                 <th>{% trans 'Дата создания' %}</th>
                                 <th>{% trans 'Действия' %}</th>
                             </tr>
@@ -24,15 +25,49 @@
                         <tbody>
                             {% for task in tasks %}
                                 <tr>
-                                    <td>{{ task.title }}</td>
+                                    <td>
+                                        {{ task.title }}
+                                        {% if task.task_type == 'SURVEY' %}
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ task.target_count }} / {{ task.current_count }}
+                                                {% if task.target_count > 0 %}
+                                                    ({{ task.get_completion_percentage }}%)
+                                                {% endif %}
+                                            </small>
+                                            {% if task.target_count > 0 %}
+                                                <div class="progress" style="height: 5px; margin-top: 3px;">
+                                                    <div class="progress-bar bg-success" role="progressbar" 
+                                                         style="width: {{ task.get_completion_percentage }}%" 
+                                                         aria-valuenow="{{ task.get_completion_percentage }}" 
+                                                         aria-valuemin="0" 
+                                                         aria-valuemax="100">
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
                                     <td>{{ task.get_task_type_display }}</td>
                                     <td>{{ task.get_status_display }}</td>
                                     <td>{{ task.client.name|default:"—" }}</td>
+                                    <td>
+                                        {% if task.task_type == 'SURVEY' %}
+                                            {{ task.target_count }} / {{ task.current_count }}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
                                     <td>{{ task.created_at|date:"d.m.Y H:i" }}</td>
                                     <td>
                                         <a href="{% url 'tasks:task_detail' task.pk %}" class="btn btn-sm btn-primary">{% trans 'Просмотреть' %}</a>
                                         {% if user.role == 'EMPLOYEE' %}
-                                            <a href="#" class="btn btn-sm btn-success">{% trans 'Выполнить' %}</a>
+                                            {% if task.task_type == 'SURVEY' %}
+                                                {% if task.status != 'COMPLETED' %}
+                                                    <a href="{% url 'tasks:survey_response' task.pk %}" class="btn btn-sm btn-success">{% trans 'Заполнить' %}</a>
+                                                {% endif %}
+                                            {% else %}
+                                                <a href="#" class="btn btn-sm btn-success">{% trans 'Выполнить' %}</a>
+                                            {% endif %}
                                         {% endif %}
                                     </td>
                                 </tr>

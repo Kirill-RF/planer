@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
-{% load i18n %}
-{% load form_tags %}
+{% load i18n form_tags %}
 {% block content %}
 <div class="container mt-4">
     <div class="row">
@@ -37,7 +36,14 @@
                                 <h6>{{ question.question_text }}</h6>
                                 <small class="text-muted">{% trans 'Тип:' %} {{ question.get_question_type_display }}</small>
                                 
-                                {% if question.question_type == 'RADIO' %}
+                                {% if question.question_type == 'TEXT' %}
+                                    <textarea class="form-control" name="question_{{ question.id }}" id="question_{{ question.id }}" rows="5"></textarea>
+                                    
+                                {% elif question.question_type == 'TEXT_SHORT' %}
+                                    <input type="text" class="form-control" name="question_{{ question.id }}" id="question_{{ question.id }}" maxlength="20">
+                                    <small class="text-muted">Максимум 20 символов</small>
+                                    
+                                {% elif question.question_type == 'RADIO' %}
                                     {% if question.has_custom_choices %}
                                         {% for choice in question.choices.all %}
                                             <div class="form-check">
@@ -85,14 +91,36 @@
                                         </div>
                                     {% endif %}
                                     
-                                {% elif question.question_type == 'TEXT' %}
-                                    <input type="text" class="form-control" name="question_{{ question.id }}" id="question_{{ question.id }}">
+                                {% elif question.question_type == 'SELECT_SINGLE' %}
+                                    <select class="form-select" name="question_{{ question.id }}" id="question_{{ question.id }}">
+                                        <option value="">{% trans '---' %}</option>
+                                        {% if question.has_custom_choices %}
+                                            {% for choice in question.choices.all %}
+                                                <option value="{{ choice.id }}">{{ choice.choice_text }}</option>
+                                            {% endfor %}
+                                        {% else %}
+                                            <option value="да">Да</option>
+                                            <option value="нет">Нет</option>
+                                        {% endif %}
+                                    </select>
                                     
-                                {% elif question.question_type == 'TEXTAREA' %}
-                                    <textarea class="form-control" name="question_{{ question.id }}" id="question_{{ question.id }}" rows="3"></textarea>
+                                {% elif question.question_type == 'SELECT_MULTIPLE' %}
+                                    <select class="form-select" name="question_{{ question.id }}" id="question_{{ question.id }}" multiple>
+                                        {% if question.has_custom_choices %}
+                                            {% for choice in question.choices.all %}
+                                                <option value="{{ choice.id }}">{{ choice.choice_text }}</option>
+                                            {% endfor %}
+                                        {% else %}
+                                            <option value="да">Да</option>
+                                            <option value="нет">Нет</option>
+                                        {% endif %}
+                                    </select>
+                                    <small class="text-muted">Удерживайте Ctrl для множественного выбора</small>
                                     
                                 {% elif question.question_type == 'PHOTO' %}
-                                    <input type="file" class="form-control" name="question_{{ question.id }}" id="question_{{ question.id }}" accept="image/*">
+                                    <input type="file" class="form-control" name="question_{{ question.id }}" 
+                                           id="question_{{ question.id }}" accept="image/*" multiple>
+                                    <small class="text-muted mt-2">Можно выбрать несколько файлов (до 10)</small>
                                 {% endif %}
                                 
                                 {% if form|get_item:question.id and form|get_item:question.id.errors %}
