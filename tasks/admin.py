@@ -145,26 +145,88 @@ class TaskAdmin(NestedModelAdmin):
                 'total_answers': SurveyAnswer.objects.filter(question=question).count()
             }
             
-            if question.has_custom_choices():
+            # Вопросы с вариантами ответов (кастомные или стандартные)
+            if question.question_type in ['RADIO', 'CHECKBOX']:
                 choice_stats = []
-                for choice in question.choices.all():
-                    count = SurveyAnswer.objects.filter(
-                        question=question,
-                        selected_choices=choice
-                    ).count()
-                    percentage = (count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
-                    choice_stats.append({
-                        'choice': choice,
-                        'count': count,
-                        'percentage': round(percentage, 1)
-                    })
+                
+                # Проверяем, есть ли кастомные варианты
+                if question.choices.exists():
+                    # Кастомные варианты
+                    for choice in question.choices.all():
+                        count = SurveyAnswer.objects.filter(
+                            question=question,
+                            selected_choices=choice
+                        ).count()
+                        percentage = (count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                        choice_stats.append({
+                            'choice': choice,
+                            'count': count,
+                            'percentage': round(percentage, 1)
+                        })
+                else:
+                    # Стандартные варианты ("Да"/"Нет")
+                    # Для радиокнопок
+                    if question.question_type == 'RADIO':
+                        yes_count = SurveyAnswer.objects.filter(
+                            question=question,
+                            text_answer='да'
+                        ).count()
+                        no_count = SurveyAnswer.objects.filter(
+                            question=question,
+                            text_answer='нет'
+                        ).count()
+                        
+                        choice_stats.extend([
+                            {
+                                'choice': type('Choice', (), {'choice_text': 'Да'}),
+                                'count': yes_count,
+                                'percentage': (yes_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                            },
+                            {
+                                'choice': type('Choice', (), {'choice_text': 'Нет'}),
+                                'count': no_count,
+                                'percentage': (no_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                            }
+                        ])
+                    
+                    # Для чекбоксов
+                    elif question.question_type == 'CHECKBOX':
+                        yes_count = SurveyAnswer.objects.filter(
+                            question=question,
+                            text_answer__contains='да'
+                        ).count()
+                        no_count = SurveyAnswer.objects.filter(
+                            question=question,
+                            text_answer__contains='нет'
+                        ).count()
+                        
+                        choice_stats.extend([
+                            {
+                                'choice': type('Choice', (), {'choice_text': 'Да'}),
+                                'count': yes_count,
+                                'percentage': (yes_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                            },
+                            {
+                                'choice': type('Choice', (), {'choice_text': 'Нет'}),
+                                'count': no_count,
+                                'percentage': (no_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                            }
+                        ])
+                
                 question_stats['choice_stats'] = choice_stats
-            else:
-                # Для текстовых ответов
+                
+            # Текстовые вопросы
+            elif question.question_type in ['TEXT', 'TEXT_SHORT', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
                 text_answers = SurveyAnswer.objects.filter(
                     question=question
                 ).exclude(text_answer__isnull=True).exclude(text_answer='')
                 question_stats['text_answers_count'] = text_answers.count()
+                
+            # Фото вопросы
+            elif question.question_type == 'PHOTO':
+                question_stats['answers_with_photos'] = SurveyAnswer.objects.filter(
+                    question=question
+                ).prefetch_related('photos')
             
             questions_stats.append(question_stats)
         
@@ -177,10 +239,6 @@ class TaskAdmin(NestedModelAdmin):
             'opts': self.model._meta,
         }
         return render(request, 'admin/tasks/survey_statistics.html', context)
-    
-    class Meta:
-        verbose_name = _('Задача')
-        verbose_name_plural = _('Задачи')
 
 @admin.register(SurveyAnswer)
 class SurveyAnswerAdmin(admin.ModelAdmin):
