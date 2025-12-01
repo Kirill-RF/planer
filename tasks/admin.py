@@ -26,7 +26,19 @@ class SurveyQuestionChoiceInline(NestedTabularInline):
         if obj and hasattr(obj, 'question_type'):
             if obj.question_type in ['RADIO', 'CHECKBOX', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
                 return True
+        # Разрешаем добавление, если вопрос еще не создан (при создании новой анкеты)
         return False
+    
+    def get_queryset(self, request):
+        """Отображаем варианты ответов только для вопросов с кастомными вариантами."""
+        qs = super().get_queryset(request)
+        # Показываем все варианты, если есть хотя бы один
+        if self.parent_model:
+            parent_obj = self.parent_model
+            if hasattr(parent_obj, 'question_type'):
+                if parent_obj.question_type in ['RADIO', 'CHECKBOX', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
+                    return qs
+        return qs.none()  # Не показываем для других типов
 
 class SurveyQuestionInline(NestedStackedInline):
     """Inline questions for survey tasks."""
