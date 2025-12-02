@@ -5,6 +5,11 @@
 {% block title %}{{ title }} | {% trans 'Администрирование Django' %}{% endblock %}
 
 {% block content %}
+<style>
+    .progress-bar {
+        color: black !important;
+    }
+</style>
 <div id="content-main">
     <div class="module">
         <h2>{{ title }}</h2>
@@ -64,7 +69,8 @@
                                             <span class="me-3" style="width: 200px; font-weight: bold;">
                                                 {{ choice_stat.choice.choice_text }}
                                             </span>
-                                            <div class="progress" style="flex-grow: 1; height: 20px;">
+                                            <div class="progress" style="flex-grow: 1; height: 20px; .progress-bar {color: black !important;
+}">
                                                 <div class="progress-bar" 
                                                      role="progressbar" 
                                                      style="width: {{ choice_stat.percentage|round_to_half_percent }}%; 
