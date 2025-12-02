@@ -20,6 +20,7 @@ class TaskStatistics(models.Model):
     task = models.ForeignKey(
         Task,
         on_delete=models.CASCADE,
+        related_name='report_statistics_tasks',
         verbose_name=_('Задача')
     )
     client = models.ForeignKey(

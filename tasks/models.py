@@ -502,6 +502,7 @@ class TaskStatistics(models.Model):
     task = models.ForeignKey(
         'Task',
         on_delete=models.CASCADE,
+        related_name='task_statistics_tasks',
         verbose_name=_('Задача')
     )
     total_responses = models.PositiveIntegerField(_('Всего ответов'), default=0)
