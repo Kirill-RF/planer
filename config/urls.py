@@ -14,6 +14,7 @@ urlpatterns = [
     # App URLs
     path('users/', include('users.urls')),
     path('tasks/', include('tasks.urls')),
+    path('api/clients/search/', include('clients.urls')),
     path('clients/', include('clients.urls')),
     path('reports/', include('reports.urls')),  # Убедитесь, что эта строка есть
 ]

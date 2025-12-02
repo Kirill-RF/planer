@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
-{% load i18n form_tags %}
+{% load i18n form_tags static %}
 {% block content %}
 <div class="container mt-4">
     <div class="row">
@@ -23,16 +22,13 @@
                         <!-- Поле выбора клиента (если не задан в задаче) -->
                         {% if not task.client %}
                             <div class="form-group mb-3">
-								<label for="id_client" class="form-label">Выберите клиента:</label>
-								<div id="client-input-container">
-									<input type="text" name="client" id="id_client" class="form-control" required>
-									<div id="client-list"></div>
-								</div>
-								<input type="hidden" name="client_id" id="selected_client_id">
-							</div>
-
-							<script src="{% static 'js/client_search.js' %}"></script>
-							<link rel="stylesheet" href="{% static 'css/client_search.css' %}">
+                                <label for="id_client" class="form-label">Выберите клиента:</label>
+                                <div id="client-input-container">
+                                    <input type="text" name="client" id="id_client" class="form-control" required>
+                                    <div id="client-list"></div>
+                                </div>
+                                <input type="hidden" name="client_id" id="selected_client_id">
+                            </div>
                         {% endif %}
                         
                         <!-- Вопросы анкеты -->
@@ -143,5 +139,10 @@
             </div>
         </div>
     </div>
+
+    {% if not task.client %}
+        <script src="{% static 'js/client_search.js' %}"></script>
+        <link rel="stylesheet" href="{% static 'css/client_search.css' %}">
+    {% endif %}
 </div>
 {% endblock %}
