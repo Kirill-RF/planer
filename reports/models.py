@@ -17,11 +17,7 @@ class TaskStatistics(models.Model):
     Stores pre-calculated statistics for performance optimization.
     """
     
-    task = models.ForeignKey(
-        Task,
-        on_delete=models.CASCADE,
-        verbose_name=_('Задача')
-    )
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='report_statistics_tasks')
     client = models.ForeignKey(
         Client,
         on_delete=models.CASCADE,

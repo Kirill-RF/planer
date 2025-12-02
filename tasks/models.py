@@ -499,11 +499,7 @@ class TaskStatistics(models.Model):
     Модель для хранения агрегированной статистики по задачам.
     Используется для создания отчетов и дашбордов.
     """
-    task = models.ForeignKey(
-        'Task',
-        on_delete=models.CASCADE,
-        verbose_name=_('Задача')
-    )
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='task_statistics_tasks')
     total_responses = models.PositiveIntegerField(_('Всего ответов'), default=0)
     unique_clients = models.PositiveIntegerField(_('Уникальных клиентов'), default=0)
     completion_rate = models.FloatField(_('Процент выполнения'), default=0.0)
