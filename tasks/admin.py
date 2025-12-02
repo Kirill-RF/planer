@@ -1,5 +1,4 @@
 # tasks/admin.py
-
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 from django.forms import TextInput, Textarea
@@ -20,25 +19,6 @@ class SurveyQuestionChoiceInline(NestedTabularInline):
     extra = 3
     verbose_name = _('Вариант ответа')
     verbose_name_plural = _('Варианты ответов')
-    
-    def has_add_permission(self, request, obj=None):
-        """Разрешаем добавление вариантов только для подходящих типов вопросов."""
-        if obj and hasattr(obj, 'question_type'):
-            if obj.question_type in ['RADIO', 'CHECKBOX', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
-                return True
-        # Разрешаем добавление, если вопрос еще не создан (при создании новой анкеты)
-        return False
-    
-    def get_queryset(self, request):
-        """Отображаем варианты ответов только для вопросов с кастомными вариантами."""
-        qs = super().get_queryset(request)
-        # Показываем все варианты, если есть хотя бы один
-        if self.parent_model:
-            parent_obj = self.parent_model
-            if hasattr(parent_obj, 'question_type'):
-                if parent_obj.question_type in ['RADIO', 'CHECKBOX', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
-                    return qs
-        return qs.none()  # Не показываем для других типов
 
 class SurveyQuestionInline(NestedStackedInline):
     """Inline questions for survey tasks."""
@@ -47,7 +27,6 @@ class SurveyQuestionInline(NestedStackedInline):
     inlines = [SurveyQuestionChoiceInline]
     verbose_name = _('Вопрос')
     verbose_name_plural = _('Вопросы')
-    
     formfield_overrides = {
         models.CharField: {'widget': TextInput(attrs={'size': '80'})},
         models.TextField: {'widget': Textarea(attrs={'rows': 3, 'cols': 80})},
@@ -55,9 +34,6 @@ class SurveyQuestionInline(NestedStackedInline):
 
 @admin.register(SurveyQuestionChoice)
 class SurveyQuestionChoiceAdmin(admin.ModelAdmin):
-    """
-    Админ-интерфейс для вариантов ответов.
-    """
     list_display = ('question', 'choice_text', 'order')
     list_filter = ('question__task', 'question')
     search_fields = ('choice_text', 'question__question_text')
@@ -65,25 +41,12 @@ class SurveyQuestionChoiceAdmin(admin.ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(NestedModelAdmin):
-    """
-    Админ-интерфейс для задач с агрегированной статистикой.
-    """
     list_display = ('title', 'task_type', 'status', 'is_active', 
                    'assigned_to', 'client', 'created_by', 'created_at',
                    'get_completion_info')
-    list_filter = (
-        'task_type', 
-        'status', 
-        'is_active', 
-        'assigned_to', 
-        'client', 
-        'created_by',
-        'created_at'
-    )
-    date_hierarchy = 'created_at'
+    list_filter = ('task_type', 'status', 'is_active', 'assigned_to', 'client', 'created_by')
     search_fields = ('title', 'description')
     list_per_page = 20
-    
     fieldsets = (
         (_('Основная информация'), {
             'fields': ('title', 'description', 'task_type', 'status', 'is_active')
@@ -103,7 +66,6 @@ class TaskAdmin(NestedModelAdmin):
     )
     
     def get_inlines(self, request, obj=None):
-        """Return appropriate inlines based on task type."""
         if obj and obj.task_type == TaskType.SURVEY:
             return [SurveyQuestionInline]
         elif obj and obj.task_type in [TaskType.EQUIPMENT_PHOTO, TaskType.SIMPLE_PHOTO]:
@@ -111,13 +73,11 @@ class TaskAdmin(NestedModelAdmin):
         return []
     
     def get_queryset(self, request):
-        """Optimize queryset by selecting related fields."""
         return super().get_queryset(request).select_related(
             'assigned_to', 'client', 'created_by'
         )
     
     def get_completion_info(self, obj):
-        """Отображает информацию о выполнении для анкет."""
         if obj.task_type == TaskType.SURVEY:
             percentage = obj.get_completion_percentage()
             return format_html(
@@ -132,7 +92,6 @@ class TaskAdmin(NestedModelAdmin):
     get_completion_info.allow_tags = True
     
     def get_urls(self):
-        """Добавляем кастомный URL для статистики анкет."""
         urls = super().get_urls()
         custom_urls = [
             path('survey-stats/<int:task_id>/', 
@@ -157,13 +116,12 @@ class TaskAdmin(NestedModelAdmin):
                 'total_answers': SurveyAnswer.objects.filter(question=question).count()
             }
             
-            # Вопросы с вариантами ответов (кастомные или стандартные)
-            if question.question_type in ['RADIO', 'CHECKBOX']:
+            # Обработка всех типов вопросов с выбором
+            if question.question_type in ['RADIO', 'CHECKBOX', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
                 choice_stats = []
                 
-                # Проверяем, есть ли кастомные варианты
+                # 1. Обработка кастомных вариантов ответов (если есть)
                 if question.choices.exists():
-                    # Кастомные варианты
                     for choice in question.choices.all():
                         count = SurveyAnswer.objects.filter(
                             question=question,
@@ -173,12 +131,35 @@ class TaskAdmin(NestedModelAdmin):
                         choice_stats.append({
                             'choice': choice,
                             'count': count,
-                            'percentage': round(percentage, 1)
+                            'percentage': round(percentage)
                         })
+                
+                # 2. Обработка стандартных вариантов (если нет кастомных)
                 else:
-                    # Стандартные варианты ("Да"/"Нет")
-                    # Для радиокнопок
-                    if question.question_type == 'RADIO':
+                    # Для вопросов с типом SELECT_SINGLE или SELECT_MULTIPLE
+                    if question.question_type in ['SELECT_SINGLE', 'SELECT_MULTIPLE']:
+                        for choice in question.choices.all():
+                            if question.question_type == 'SELECT_SINGLE':
+                                count = SurveyAnswer.objects.filter(
+                                    question=question,
+                                    text_answer=str(choice.id)
+                                ).count()
+                            else:  # SELECT_MULTIPLE
+                                count = SurveyAnswer.objects.filter(
+                                    question=question,
+                                    text_answer__contains=str(choice.id)
+                                ).count()
+                            
+                            percentage = (count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                            choice_stats.append({
+                                'choice': choice,
+                                'count': count,
+                                'percentage': round(percentage)
+                            })
+                    
+                    # Для вопросов с типом RADIO или CHECKBOX без кастомных вариантов
+                    elif question.question_type == 'RADIO':
+                        # Стандартные варианты "Да" и "Нет"
                         yes_count = SurveyAnswer.objects.filter(
                             question=question,
                             text_answer='да'
@@ -201,8 +182,8 @@ class TaskAdmin(NestedModelAdmin):
                             }
                         ])
                     
-                    # Для чекбоксов
                     elif question.question_type == 'CHECKBOX':
+                        # Стандартные варианты "Да" и "Нет"
                         yes_count = SurveyAnswer.objects.filter(
                             question=question,
                             text_answer__contains='да'
@@ -228,7 +209,7 @@ class TaskAdmin(NestedModelAdmin):
                 question_stats['choice_stats'] = choice_stats
                 
             # Текстовые вопросы
-            elif question.question_type in ['TEXT', 'TEXT_SHORT', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
+            elif question.question_type in ['TEXT', 'TEXT_SHORT', 'TEXTAREA']:
                 text_answers = SurveyAnswer.objects.filter(
                     question=question
                 ).exclude(text_answer__isnull=True).exclude(text_answer='')
@@ -252,50 +233,38 @@ class TaskAdmin(NestedModelAdmin):
         }
         return render(request, 'admin/tasks/survey_statistics.html', context)
 
+# Остальные регистрации моделей...
 @admin.register(SurveyAnswer)
 class SurveyAnswerAdmin(admin.ModelAdmin):
-    """
-    Админ-интерфейс для ответов на вопросы (только чтение).
-    """
     list_display = ('user', 'question', 'client', 'get_selected_choices', 'text_answer_preview', 'has_photos', 'created_at')
-    list_filter = ('user', 'question__task', 'client', 'created_at')
-    search_fields = ('user__username', 'text_answer', 'client__name')
     readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at')
     list_per_page = 20
     
     def has_add_permission(self, request):
         return False
-    
     def has_change_permission(self, request, obj=None):
         return False
     
     def get_selected_choices(self, obj):
-        """Return comma-separated list of selected choices."""
         if obj.selected_choices.exists():
             return ', '.join([choice.choice_text for choice in obj.selected_choices.all()])
         return '-'
     get_selected_choices.short_description = _('Выбранные варианты')
     
     def text_answer_preview(self, obj):
-        """Return preview of text answer."""
         if obj.text_answer:
             return obj.text_answer[:50] + '...' if len(obj.text_answer) > 50 else obj.text_answer
         return '-'
     text_answer_preview.short_description = _('Текстовый ответ')
     
     def has_photos(self, obj):
-        """Return whether answer has photos."""
         return obj.photos.exists()
     has_photos.short_description = _('Есть фото')
     has_photos.boolean = True
 
 @admin.register(SurveyAnswerPhoto)
 class SurveyAnswerPhotoAdmin(admin.ModelAdmin):
-    """
-    Админ-интерфейс для фото ответов.
-    """
     list_display = ('answer', 'photo_thumbnail', 'created_at')
-    list_filter = ('answer__question__task', 'created_at')
     readonly_fields = ('answer', 'photo', 'created_at')
     
     def has_add_permission(self, request):
@@ -307,25 +276,15 @@ class SurveyAnswerPhotoAdmin(admin.ModelAdmin):
         return '-'
     photo_thumbnail.short_description = _('Миниатюра')
 
-# Регистрируем остальные модели для полноты
 @admin.register(PhotoReport)
 class PhotoReportAdmin(admin.ModelAdmin):
-    """
-    Админ-интерфейс для фотоотчетов.
-    """
     list_display = ('task', 'client', 'address', 'stand_count', 'created_by', 'created_at')
-    list_filter = ('task__task_type', 'client', 'created_by', 'created_at')
-    search_fields = ('client__name', 'address', 'comment')
     readonly_fields = ('task', 'client', 'address', 'stand_count', 'comment', 'created_by')
     list_per_page = 20
 
 @admin.register(PhotoReportItem)
 class PhotoReportItemAdmin(admin.ModelAdmin):
-    """
-    Админ-интерфейс для фотографий отчетов.
-    """
     list_display = ('report', 'photo_thumbnail', 'quality_score', 'is_accepted', 'created_at')
-    list_filter = ('is_accepted', 'created_at')
     readonly_fields = ('report', 'photo', 'description', 'quality_score', 'is_accepted', 'created_at')
     list_per_page = 20
     
