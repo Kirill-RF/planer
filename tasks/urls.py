@@ -13,8 +13,6 @@ urlpatterns = [
     path('answer/<int:answer_id>/add-single-photo/', views.AddSinglePhotoView.as_view(), name='add_single_photo'),
     path('my-surveys/', views.MySurveysView.as_view(), name='my_surveys'),
     path('statistics/', views.StatisticsView.as_view(), name='statistics'),
-    # tasks/urls.py - убедитесь, что маршрут существует
-    # path('survey-stats/<int:task_id>/', 
-    #      views.TaskAdmin.as_view().admin_site.admin_view(views.TaskAdmin.survey_statistics_view), 
-    #      name='survey_statistics'),
+    path('search_clients/', views.search_clients, name='search_clients'),
+
 ]

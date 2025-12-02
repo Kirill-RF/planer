@@ -6,6 +6,10 @@ This module provides views for displaying and managing tasks.
 Follows SOLID principles by separating concerns and providing clear interfaces.
 """
 
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import user_passes_test
+import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, FormView, TemplateView
 from django.urls import reverse_lazy
@@ -478,3 +482,32 @@ def survey_statistics_view(self, request, task_id):
         'opts': self.model._meta,
     }
     return render(request, 'admin/tasks/survey_statistics.html', context)
+
+@csrf_exempt
+@user_passes_test(lambda u: u.is_superuser)
+def search_clients(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        query = data.get('query', '').strip()
+        
+        if len(query) < 2:
+            return JsonResponse({'error': 'Введите минимум 2 символа для поиска'}, status=400)
+        
+        clients = Client.objects.filter(
+            name__icontains=query
+        ).order_by('name')[:20]
+        
+        if len(clients) == 0:
+            return JsonResponse({'error': 'Клиенты не найдены'}, status=400)
+        
+        client_list = [{'id': client.id, 'name': client.name} for client in clients]
+        
+        if len(clients) == 20:
+            return JsonResponse({
+                'clients': client_list,
+                'message': 'Найдено 20 совпадений. Уточните запрос для более точного результата.'
+            })
+        else:
+            return JsonResponse({'clients': client_list})
+    
+    return JsonResponse({'error': 'Метод не поддерживается'}, status=400)
