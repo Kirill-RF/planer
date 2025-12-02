@@ -121,88 +121,104 @@ class TaskAdmin(NestedModelAdmin):
                 choice_stats = []
                 
                 # 1. Обработка кастомных вариантов ответов (если есть)
-                if question.choices.exists():
+                if question.has_custom_choices():
                     for choice in question.choices.all():
-                        count = SurveyAnswer.objects.filter(
-                            question=question,
-                            selected_choices=choice
-                        ).count()
+                        # Подсчет ответов для разных типов вопросов
+                        if question.question_type == 'RADIO':
+                            # Для радиокнопок - через selected_choices
+                            count = SurveyAnswer.objects.filter(
+                                question=question,
+                                selected_choices=choice
+                            ).count()
+                        elif question.question_type == 'CHECKBOX':
+                            # Для чекбоксов - через selected_choices
+                            count = SurveyAnswer.objects.filter(
+                                question=question,
+                                selected_choices=choice
+                            ).count()
+                        elif question.question_type == 'SELECT_SINGLE':
+                            # Для одиночного выбора - через text_answer (ID варианта)
+                            count = SurveyAnswer.objects.filter(
+                                question=question,
+                                text_answer=str(choice.id)
+                            ).count()
+                        elif question.question_type == 'SELECT_MULTIPLE':
+                            # Для множественного выбора - через text_answer (ID вариантов через запятую)
+                            count = SurveyAnswer.objects.filter(
+                                question=question,
+                                text_answer__contains=str(choice.id)
+                            ).count()
+                        
                         percentage = (count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                        # Округление до 0.5%
+                        percentage = round(percentage * 2) / 2.0
                         choice_stats.append({
                             'choice': choice,
                             'count': count,
-                            'percentage': round(percentage)
+                            'percentage': percentage
                         })
                 
                 # 2. Обработка стандартных вариантов (если нет кастомных)
                 else:
-                    # Для вопросов с типом SELECT_SINGLE или SELECT_MULTIPLE
-                    if question.question_type in ['SELECT_SINGLE', 'SELECT_MULTIPLE']:
-                        for choice in question.choices.all():
-                            if question.question_type == 'SELECT_SINGLE':
-                                count = SurveyAnswer.objects.filter(
-                                    question=question,
-                                    text_answer=str(choice.id)
-                                ).count()
-                            else:  # SELECT_MULTIPLE
-                                count = SurveyAnswer.objects.filter(
-                                    question=question,
-                                    text_answer__contains=str(choice.id)
-                                ).count()
-                            
-                            percentage = (count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
-                            choice_stats.append({
-                                'choice': choice,
-                                'count': count,
-                                'percentage': round(percentage)
-                            })
-                    
-                    # Для вопросов с типом RADIO или CHECKBOX без кастомных вариантов
-                    elif question.question_type == 'RADIO':
+                    # Для вопросов с типом RADIO - стандартные варианты "Да" и "Нет"
+                    if question.question_type == 'RADIO':
                         # Стандартные варианты "Да" и "Нет"
                         yes_count = SurveyAnswer.objects.filter(
                             question=question,
-                            text_answer='да'
+                            text_answer__iexact='да'
                         ).count()
                         no_count = SurveyAnswer.objects.filter(
                             question=question,
-                            text_answer='нет'
+                            text_answer__iexact='нет'
                         ).count()
+                        
+                        yes_percentage = (yes_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                        no_percentage = (no_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                        # Округление до 0.5%
+                        yes_percentage = round(yes_percentage * 2) / 2.0
+                        no_percentage = round(no_percentage * 2) / 2.0
                         
                         choice_stats.extend([
                             {
                                 'choice': type('Choice', (), {'choice_text': 'Да'}),
                                 'count': yes_count,
-                                'percentage': (yes_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                                'percentage': yes_percentage
                             },
                             {
                                 'choice': type('Choice', (), {'choice_text': 'Нет'}),
                                 'count': no_count,
-                                'percentage': (no_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                                'percentage': no_percentage
                             }
                         ])
                     
+                    # Для вопросов с типом CHECKBOX - стандартные варианты "Да" и "Нет"
                     elif question.question_type == 'CHECKBOX':
                         # Стандартные варианты "Да" и "Нет"
                         yes_count = SurveyAnswer.objects.filter(
                             question=question,
-                            text_answer__contains='да'
+                            text_answer__icontains='да'
                         ).count()
                         no_count = SurveyAnswer.objects.filter(
                             question=question,
-                            text_answer__contains='нет'
+                            text_answer__icontains='нет'
                         ).count()
+                        
+                        yes_percentage = (yes_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                        no_percentage = (no_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                        # Округление до 0.5%
+                        yes_percentage = round(yes_percentage * 2) / 2.0
+                        no_percentage = round(no_percentage * 2) / 2.0
                         
                         choice_stats.extend([
                             {
                                 'choice': type('Choice', (), {'choice_text': 'Да'}),
                                 'count': yes_count,
-                                'percentage': (yes_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                                'percentage': yes_percentage
                             },
                             {
                                 'choice': type('Choice', (), {'choice_text': 'Нет'}),
                                 'count': no_count,
-                                'percentage': (no_count / question_stats['total_answers'] * 100) if question_stats['total_answers'] > 0 else 0
+                                'percentage': no_percentage
                             }
                         ])
                 
@@ -217,9 +233,36 @@ class TaskAdmin(NestedModelAdmin):
                 
             # Фото вопросы
             elif question.question_type == 'PHOTO':
-                question_stats['answers_with_photos'] = SurveyAnswer.objects.filter(
+                # Получаем все ответы с фото для этого вопроса
+                answers_with_photos = SurveyAnswer.objects.filter(
                     question=question
-                ).prefetch_related('photos')
+                ).prefetch_related('photos', 'client').order_by('client__name', 'created_at')
+                
+                # Группируем фото по ответам (клиентам)
+                photo_groups = []
+                for answer in answers_with_photos:
+                    photos_data = []
+                    for photo in answer.photos.all():
+                        # Попытка извлечь EXIF данные
+                        exif_data = self._extract_photo_exif(photo.photo.path) if photo.photo else None
+                        address = self._format_address_from_exif(exif_data) if exif_data else None
+                        
+                        photos_data.append({
+                            'photo': photo,
+                            'client': answer.client,
+                            'created_at': answer.created_at,
+                            'exif_data': exif_data,
+                            'address': address
+                        })
+                    
+                    if photos_data:
+                        photo_groups.append({
+                            'answer': answer,
+                            'photos_data': photos_data
+                        })
+                
+                question_stats['photo_groups'] = photo_groups
+                question_stats['total_photos'] = sum(len(group['photos_data']) for group in photo_groups)
             
             questions_stats.append(question_stats)
         
@@ -232,6 +275,69 @@ class TaskAdmin(NestedModelAdmin):
             'opts': self.model._meta,
         }
         return render(request, 'admin/tasks/survey_statistics.html', context)
+
+    def _extract_photo_exif(self, photo_path):
+        """Извлекает EXIF данные из фото."""
+        try:
+            from PIL import Image
+            from PIL.ExifTags import TAGS
+            img = Image.open(photo_path)
+            exifdata = img.getexif()
+            if exifdata:
+                exif = {}
+                for tag_id in exifdata:
+                    tag = TAGS.get(tag_id, tag_id)
+                    data = exifdata.get(tag_id)
+                    if isinstance(data, bytes):
+                        data = data.decode()
+                    exif[tag] = data
+                return exif
+        except Exception as e:
+            print(f"Error extracting EXIF: {e}")
+        return None
+
+    def _format_address_from_exif(self, exif_data):
+        """Форматирует адрес из EXIF данных."""
+        if not exif_data:
+            return None
+        
+        try:
+            # Извлечение координат из GPS данных
+            gps_info = exif_data.get('GPSInfo')
+            if gps_info:
+                # Извлечение GPS-координат
+                gps_keys = list(gps_info.keys())
+                gps_values = list(gps_info.values())
+                
+                # Извлечение широты и долготы
+                lat = self._convert_to_degrees(gps_info.get(2), gps_info.get(1))  # GPSLatitude, GPSLatitudeRef
+                lon = self._convert_to_degrees(gps_info.get(4), gps_info.get(3))  # GPSLongitude, GPSLongitudeRef
+                
+                if lat and lon:
+                    return f"{lat}, {lon}"
+        except Exception as e:
+            print(f"Error formatting address from EXIF: {e}")
+        
+        return None
+
+    def _convert_to_degrees(self, value, ref):
+        """Конвертирует GPS-координаты в градусы."""
+        if not value:
+            return None
+        
+        try:
+            d = float(value[0])
+            m = float(value[1])
+            s = float(value[2])
+            
+            degrees = d + (m / 60.0) + (s / 3600.0)
+            
+            if ref in ['S', 'W']:
+                degrees = -degrees
+                
+            return degrees
+        except (IndexError, ValueError, TypeError):
+            return None
 
 # Остальные регистрации моделей...
 @admin.register(SurveyAnswer)

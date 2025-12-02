@@ -42,17 +42,43 @@ class StatisticsGenerator:
             total_responses = max(total_responses, question_stats['total'])
             
             for answer in answers:
-                if question.question_type == 'RADIO':
-                    if answer.text_answer:
-                        question_stats['answers'][answer.text_answer] += 1
-                elif question.question_type == 'CHECKBOX':
-                    if answer.text_answer:
-                        # For checkbox, answers are comma-separated
-                        selected = [item.strip() for item in answer.text_answer.split(',')]
-                        for item in selected:
-                            question_stats['answers'][item] += 1
-                elif question.question_type in ['TEXT', 'TEXTAREA']:
+                if question.question_type in ['RADIO', 'CHECKBOX', 'SELECT_SINGLE', 'SELECT_MULTIPLE']:
+                    # For RADIO and CHECKBOX with selected_choices
+                    if answer.selected_choices.exists():
+                        for choice in answer.selected_choices.all():
+                            question_stats['answers'][choice.choice_text] += 1
+                    # For SELECT_SINGLE and SELECT_MULTIPLE with text_answer
+                    elif answer.text_answer:
+                        if question.question_type in ['SELECT_SINGLE', 'SELECT_MULTIPLE']:
+                            # Handle comma-separated values for multiple selection
+                            if question.question_type == 'SELECT_MULTIPLE':
+                                selected = [item.strip() for item in answer.text_answer.split(',')]
+                                for item in selected:
+                                    # Try to find choice by ID first, otherwise use the text
+                                    choice = question.choices.filter(id=item).first()
+                                    if choice:
+                                        question_stats['answers'][choice.choice_text] += 1
+                                    else:
+                                        question_stats['answers'][item] += 1
+                            else:  # SELECT_SINGLE
+                                choice = question.choices.filter(id=answer.text_answer).first()
+                                if choice:
+                                    question_stats['answers'][choice.choice_text] += 1
+                                else:
+                                    question_stats['answers'][answer.text_answer] += 1
+                        elif question.question_type in ['RADIO', 'CHECKBOX']:
+                            # For RADIO and CHECKBOX without selected_choices, use text_answer
+                            if question.question_type == 'RADIO':
+                                question_stats['answers'][answer.text_answer] += 1
+                            else:  # CHECKBOX
+                                # Handle comma-separated values for checkbox
+                                selected = [item.strip() for item in answer.text_answer.split(',')]
+                                for item in selected:
+                                    question_stats['answers'][item] += 1
+                elif question.question_type in ['TEXT', 'TEXT_SHORT', 'TEXTAREA']:
                     question_stats['answers']['Текстовые ответы'] += 1
+                elif question.question_type == 'PHOTO':
+                    question_stats['answers']['Фотоответы'] += 1
             
             stats[str(question.id)] = question_stats
         
