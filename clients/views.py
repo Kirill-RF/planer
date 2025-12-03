@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 from django.views import View
-from tasks.models import Client
+from clients.models import Client
 
 class ClientSearchView(View):
     def get(self, request):

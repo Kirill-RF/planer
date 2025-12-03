@@ -14,36 +14,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            fetch('/search_clients/', {
-                method: 'POST',
+            fetch(`/api/clients/search/?q=${encodeURIComponent(query)}`, {
+                method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                body: JSON.stringify({query: query})
+                }
             })
             .then(response => response.json())
             .then(data => {
                 clientList.innerHTML = '';
                 
-                if (data.error) {
-                    const errorItem = document.createElement('div');
-                    errorItem.className = 'client-item-error';
-                    errorItem.textContent = data.error;
-                    clientList.appendChild(errorItem);
-                    clientList.style.display = 'block';
-                    return;
-                }
-                
-                if (data.message) {
-                    const messageItem = document.createElement('div');
-                    messageItem.className = 'client-item-message';
-                    messageItem.textContent = data.message;
-                    clientList.appendChild(messageItem);
-                }
-                
-                if (data.clients && data.clients.length > 0) {
-                    data.clients.forEach(client => {
+                if (data && data.length > 0) {
+                    data.forEach(client => {
                         const item = document.createElement('div');
                         item.className = 'client-item';
                         item.textContent = client.name;
@@ -62,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     const noResultsItem = document.createElement('div');
                     noResultsItem.className = 'client-item-message';
-                    noResultsItem.textContent = data.message || 'Клиенты не найдены';
+                    noResultsItem.textContent = 'Клиенты не найдены';
                     clientList.appendChild(noResultsItem);
                     clientList.style.display = 'block';
                 }
@@ -123,18 +105,5 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
+    
 });
