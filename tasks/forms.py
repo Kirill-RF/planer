@@ -16,12 +16,8 @@ class SurveyResponseForm(forms.Form):
         self.user = user
         
         if not task.client:
-            self.fields['selected_client'] = forms.ModelChoiceField(
-                queryset=Client.objects.all(),
-                label=_('Выберите клиента'),
-                empty_label=_('Выберите клиента...'),
-                required=True
-            )
+            # We'll handle client selection in the save method using POST data
+            pass
         
         for question in task.questions.all().order_by('order'):
             field_name = f'question_{question.id}'
@@ -122,7 +118,25 @@ class SurveyResponseForm(forms.Form):
         if self.task.client:
             client = self.task.client
         else:
-            client = self.cleaned_data['selected_client']
+            # Get the client from the form data (using the hidden field)
+            client_id = self.data.get('selected_client_id')
+            if client_id:
+                try:
+                    client = Client.objects.get(id=client_id)
+                except Client.DoesNotExist:
+                    # Fallback: try to get by name if ID is not available
+                    client_name = self.data.get('selected_client', '')
+                    if client_name:
+                        client = Client.objects.get(name=client_name)
+                    else:
+                        raise ValueError("Клиент не выбран")
+            else:
+                # Fallback: try to get by name if ID is not available
+                client_name = self.data.get('selected_client', '')
+                if client_name:
+                    client = Client.objects.get(name=client_name)
+                else:
+                    raise ValueError("Клиент не выбран")
         
         for question in self.task.questions.all():
             field_name = f'question_{question.id}'

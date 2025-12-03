@@ -272,6 +272,9 @@ class SurveyAnswer(models.Model):
         verbose_name_plural = _('Ответы на вопросы')
 
 # ДОБАВЬТЕ новую модель для фото
+import os
+from datetime import datetime
+
 class SurveyAnswerPhoto(models.Model):
     """
     Multiple photos for a single survey answer.
@@ -284,10 +287,28 @@ class SurveyAnswerPhoto(models.Model):
     )
     photo = models.ImageField(
         _('Фото'),
-        upload_to='survey_answer_photos/%Y/%m/%d/',
+        upload_to='survey_answer_photos/',
         validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png'])]
     )
     created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
+    
+    def save(self, *args, **kwargs):
+        # Custom upload path: survey_answer_photos/client_name/date/timestamp_filename
+        if self.answer and self.answer.client and self.photo:
+            client_name = self.answer.client.name.replace('/', '_').replace('\\', '_')  # Sanitize path
+            # Use current datetime for path since created_at might not be set yet
+            current_datetime = datetime.now()
+            date_path = current_datetime.strftime('%Y/%m/%d')
+            original_filename = os.path.basename(self.photo.name)
+            name, ext = os.path.splitext(original_filename)
+            
+            # Add timestamp to avoid conflicts
+            timestamp = current_datetime.strftime('%Y%m%d_%H%M%S_%f')
+            new_filename = f"{name}_{timestamp}{ext}"
+            
+            # Construct the new path
+            self.photo.name = f"survey_answer_photos/{client_name}/{date_path}/{new_filename}"
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"Фото для ответа {self.answer.id}"

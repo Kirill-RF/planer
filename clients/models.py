@@ -62,7 +62,7 @@ class Client(models.Model):
         Get the employee assigned to this client
     """
     
-    name = models.CharField(_('Клиент'), max_length=200)
+    name = models.CharField(_('Клиент'), max_length=200, db_index=True)
     employee = models.ForeignKey(
         CustomUser,
         on_delete=models.SET_NULL,
@@ -92,3 +92,6 @@ class Client(models.Model):
         verbose_name = _('Клиент')
         verbose_name_plural = _('Клиенты')
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['name']),  # Index for faster search
+        ]
