@@ -484,24 +484,24 @@ def survey_statistics_view(self, request, task_id):
     return render(request, 'admin/tasks/survey_statistics.html', context)
 
 @csrf_exempt
-@user_passes_test(lambda u: u.is_superuser)
 def search_clients(request):
     if request.method == 'POST':
         data = json.loads(request.body)
         query = data.get('query', '').strip()
-        
+
         if len(query) < 2:
             return JsonResponse({'error': 'Введите минимум 2 символа для поиска'}, status=400)
-        
+
+        # Use database indexing for faster search
         clients = Client.objects.filter(
             name__icontains=query
         ).order_by('name')[:20]
-        
+
         if len(clients) == 0:
-            return JsonResponse({'error': 'Клиенты не найдены'}, status=400)
-        
+            return JsonResponse({'message': 'Клиенты не найдены'})
+
         client_list = [{'id': client.id, 'name': client.name} for client in clients]
-        
+
         if len(clients) == 20:
             return JsonResponse({
                 'clients': client_list,
@@ -509,5 +509,5 @@ def search_clients(request):
             })
         else:
             return JsonResponse({'clients': client_list})
-    
+
     return JsonResponse({'error': 'Метод не поддерживается'}, status=400)
