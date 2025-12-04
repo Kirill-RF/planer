@@ -127,14 +127,14 @@ class SurveyResponseForm(forms.Form):
                     # Fallback: try to get by name if ID is not available
                     client_name = self.data.get('selected_client', '')
                     if client_name:
-                        client = Client.objects.get(name=client_name)
+                        client = Client.objects.get(name__iexact=client_name)
                     else:
                         raise ValueError("Клиент не выбран")
             else:
                 # Fallback: try to get by name if ID is not available
                 client_name = self.data.get('selected_client', '')
                 if client_name:
-                    client = Client.objects.get(name=client_name)
+                    client = Client.objects.get(name__iexact=client_name)
                 else:
                     raise ValueError("Клиент не выбран")
         
