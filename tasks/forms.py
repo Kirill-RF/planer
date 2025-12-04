@@ -3,6 +3,9 @@ from django import forms
 from django.utils.translation import gettext_lazy as _ 
 from .models import SurveyAnswer, SurveyAnswerPhoto, SurveyQuestion, Client, SurveyQuestionChoice
 from users.models import CustomUser
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SurveyResponseForm(forms.Form):
     """
@@ -127,14 +130,36 @@ class SurveyResponseForm(forms.Form):
                     # Fallback: try to get by name if ID is not available
                     client_name = self.data.get('selected_client', '')
                     if client_name:
-                        client = Client.objects.get(name=client_name)
+                        try:
+                            client = Client.objects.get(name__iexact=client_name)
+                        except Client.DoesNotExist:
+                            # Если точное совпадение не найдено, ищем частичное совпадение
+                            try:
+                                client = Client.objects.get(name__icontains=client_name)
+                                # Логируем для аудита нечеткое совпадение
+                                logger.warning(f"Нечеткое совпадение при поиске клиента: '{client_name}' -> '{client.name}'")
+                            except Client.DoesNotExist:
+                                raise ValueError(f"Клиент с названием '{client_name}' не найден")
+                            except Client.MultipleObjectsReturned:
+                                raise ValueError(f"Найдено несколько клиентов с названием, содержащим '{client_name}'")
                     else:
                         raise ValueError("Клиент не выбран")
             else:
                 # Fallback: try to get by name if ID is not available
                 client_name = self.data.get('selected_client', '')
                 if client_name:
-                    client = Client.objects.get(name=client_name)
+                    try:
+                        client = Client.objects.get(name__iexact=client_name)
+                    except Client.DoesNotExist:
+                        # Если точное совпадение не найдено, ищем частичное совпадение
+                        try:
+                            client = Client.objects.get(name__icontains=client_name)
+                            # Логируем для аудита нечеткое совпадение
+                            logger.warning(f"Нечеткое совпадение при поиске клиента: '{client_name}' -> '{client.name}'")
+                        except Client.DoesNotExist:
+                            raise ValueError(f"Клиент с названием '{client_name}' не найден")
+                        except Client.MultipleObjectsReturned:
+                            raise ValueError(f"Найдено несколько клиентов с названием, содержащим '{client_name}'")
                 else:
                     raise ValueError("Клиент не выбран")
         
