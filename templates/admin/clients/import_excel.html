@@ -1,0 +1,86 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .import-excel-form {
+        max-width: 600px;
+        margin: 20px auto;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    .form-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    .btn {
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+    .btn-primary {
+        background-color: #007cba;
+        color: white;
+    }
+    .btn-default {
+        background-color: #f0f0f0;
+        color: #333;
+    }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:'|add:opts.model_name|add:'_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% trans 'Импорт клиентов из Excel' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="import-excel-form">
+    <h1>{% trans 'Импорт клиентов из Excel' %}</h1>
+    
+    <p>Формат файла: Excel (.xlsx или .xls)</p>
+    <p>Обязательные поля:</p>
+    <ul>
+        <li><strong>клиент</strong> (обязательное поле)</li>
+    </ul>
+    <p>Необязательные поля:</p>
+    <ul>
+        <li><strong>сотрудник</strong> (необязательное поле)</li>
+        <li><strong>группа</strong> (необязательное поле)</li>
+        <li><strong>название торговой точки</strong> (необязательное поле)</li>
+        <li><strong>адрес торговой точки</strong> (необязательное поле)</li>
+    </ul>
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="id_excel_file">Выберите Excel файл:</label>
+            <input type="file" id="id_excel_file" name="excel_file" accept=".xlsx,.xls" required>
+        </div>
+        
+        <div class="submit-row">
+            <input type="submit" value="Импортировать" class="btn btn-primary default">
+            <a href="{% url 'admin:clients_client_changelist' %}" class="btn btn-default">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
