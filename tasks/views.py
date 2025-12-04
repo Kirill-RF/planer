@@ -126,7 +126,12 @@ class SurveyResponseView(LoginRequiredMixin, FormView):
     # В SurveyResponseView метод form_valid
 
     def form_valid(self, form):
-        form.save()
+        try:
+            form.save()
+        except ValueError as e:
+            messages.error(self.request, str(e))
+            return self.form_invalid(form)
+        
         task = form.task
         
         # Для фотоотчетов — статус "На проверке"
