@@ -14,7 +14,20 @@ Provides Russian language interface and inline editing capabilities.
 
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
 from .models import Client, ClientGroup
+
+
+class ClientResource(resources.ModelResource):
+    """Resource class for importing/exporting Client model."""
+    
+    class Meta:
+        model = Client
+        import_id_fields = ['name']
+        fields = ('name', 'employee__username', 'client_groups__name', 'trading_point_name', 'trading_point_address')
+        # Define the human-readable field names for import
+        export_order = ('name', 'employee__username', 'client_groups__name', 'trading_point_name', 'trading_point_address')
 
 class ClientInline(admin.TabularInline):
     """Inline client editing for client groups."""
@@ -46,13 +59,14 @@ class ClientGroupAdmin(admin.ModelAdmin):
         verbose_name_plural = _('Группы клиентов')
 
 @admin.register(Client)
-class ClientAdmin(admin.ModelAdmin):
+class ClientAdmin(ImportExportModelAdmin):
     """
     Admin interface for Client model.
     
-    Provides comprehensive client management interface.
+    Provides comprehensive client management interface with import/export functionality.
     """
     
+    resource_class = ClientResource
     list_display = ('name', 'employee', 'address', 'get_groups', 'created_at')
     list_filter = ('client_groups', 'employee')
     search_fields = ('name', 'address')

@@ -72,6 +72,8 @@ class Client(models.Model):
         verbose_name=_('Сотрудник')
     )
     address = models.CharField(_('Адрес'), max_length=300, blank=True, null=True)
+    trading_point_name = models.CharField(_('Название торговой точки'), max_length=200, blank=True, null=True)
+    trading_point_address = models.CharField(_('Адрес торговой точки'), max_length=300, blank=True, null=True)
     client_groups = models.ManyToManyField(
         ClientGroup,
         blank=True,
