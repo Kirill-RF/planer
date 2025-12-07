@@ -343,7 +343,8 @@ class TaskAdmin(NestedModelAdmin):
 @admin.register(SurveyAnswer)
 class SurveyAnswerAdmin(admin.ModelAdmin):
     list_display = ('user', 'question', 'client', 'get_selected_choices', 'text_answer_preview', 'has_photos', 'created_at')
-    readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at')
+    list_filter = ('client', 'user', 'question__task', 'question', 'created_at', 'question__task__task_type')
+    readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at', 'photos_display')
     list_per_page = 20
     
     def has_add_permission(self, request):
@@ -367,10 +368,43 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         return obj.photos.exists()
     has_photos.short_description = _('Есть фото')
     has_photos.boolean = True
+    
+    def photos_display(self, obj):
+        """Display photos with clickable thumbnails for enlargement."""
+        photos = obj.photos.all()
+        if not photos:
+            return "Нет фото"
+        
+        photos_html = []
+        for photo in photos:
+            if photo.photo:
+                # Create thumbnail and full-size image
+                photos_html.append(
+                    format_html(
+                        '''
+                        <div style="display: inline-block; margin: 5px; position: relative;">
+                            <a href="{}" target="_blank" style="display: block;">
+                                <img src="{}" style="width: 100px; height: 100px; object-fit: cover; border: 1px solid #ddd; cursor: pointer;" 
+                                     title="Кликните для увеличения" />
+                            </a>
+                        </div>
+                        ''',
+                        photo.photo.url,  # Full-size image when clicked
+                        photo.photo.url   # Thumbnail
+                    )
+                )
+        return format_html('<div style="display: flex; flex-wrap: wrap;">{}</div>', format_html(''.join(photos_html)))
+    photos_display.short_description = _('Фото ответа')
+    
+    def get_queryset(self, request):
+        """Optimize queryset with prefetch_related for better performance."""
+        qs = super().get_queryset(request)
+        return qs.select_related('user', 'question', 'client', 'question__task').prefetch_related('selected_choices', 'photos')
 
 @admin.register(SurveyAnswerPhoto)
 class SurveyAnswerPhotoAdmin(admin.ModelAdmin):
     list_display = ('answer', 'photo_thumbnail', 'created_at')
+    list_filter = ('created_at', 'answer__user', 'answer__client', 'answer__question__task')
     readonly_fields = ('answer', 'photo', 'created_at')
     
     def has_add_permission(self, request):
@@ -381,6 +415,11 @@ class SurveyAnswerPhotoAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="width: 50px; height: 50px; object-fit: cover;" />', obj.photo.url)
         return '-'
     photo_thumbnail.short_description = _('Миниатюра')
+    
+    def get_queryset(self, request):
+        """Optimize queryset with select_related for better performance."""
+        qs = super().get_queryset(request)
+        return qs.select_related('answer', 'answer__user', 'answer__client', 'answer__question', 'answer__question__task')
 
 @admin.register(PhotoReport)
 class PhotoReportAdmin(admin.ModelAdmin):
