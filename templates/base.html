@@ -1,62 +1,52 @@
-<!-- templates/base.html -->
-<!-- base.html -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Система опросов{% endblock %}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body { padding-top: 56px; } /* Отступ под фиксированный navbar */
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Система управления сотрудниками{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .control-panel {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .task-list {
+            height: 100%;
+        }
+        .stats-panel {
+            height: 100%;
+        }
+        @media (max-width: 768px) {
+            .stats-panel, .task-list {
+                margin-top: 20px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <!-- Навигационная панель -->
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
-    <div class="container">
-      <a class="navbar-brand" href="{% url 'home' %}">📊 Система опросов</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav me-auto">
-          <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" 
-               href="{% url 'home' %}">Главная</a>
-          </li>
-          {% if user.is_staff %}
-          <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'results_overview' %}active{% endif %}"
-				href="{% url 'results_overview' %}">Результаты</a>
-          </li>
-          {% endif %}
-        </ul>
-        {% if user.is_authenticated %}
-          <span class="navbar-text text-white me-3">
-            👤 {{ user.username }}
-          </span>
-          <a class="btn btn-outline-light btn-sm" href="{% url 'admin:logout' %}">Выйти</a>
-        {% endif %}
-      </div>
-    </div>
-  </nav>
-
-  <!-- Основной контент -->
-  <main class="container mt-4">
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-          {{ message }}
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="control-panel">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{% url 'home' %}" class="h3 text-decoration-none text-dark">Главная</a>
+                <div>
+                    {% if user.is_authenticated %}
+                        <span class="me-3">Добро пожаловать, {{ user.username }}</span>
+                        <a href="{% url 'logout' %}" class="btn btn-outline-danger">Выход</a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
-      {% endfor %}
-    {% endif %}
+    </div>
 
-    {% block content %}{% endblock %}
-  </main>
+    <div class="container">
+        {% block content %}
+        {% endblock %}
+    </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
