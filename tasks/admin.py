@@ -6,12 +6,27 @@ from django.db import models
 from django.urls import path, reverse
 from django.shortcuts import render, get_object_or_404
 from django.utils.html import format_html
+from django.contrib.admin import SimpleListFilter
 from nested_admin import NestedModelAdmin, NestedStackedInline, NestedTabularInline
 from .models import (
     Task, TaskStatus, TaskType, SurveyQuestion, 
     SurveyQuestionChoice, SurveyAnswer, PhotoReport, PhotoReportItem,
     SurveyAnswerPhoto
 )
+
+class TaskFilter(SimpleListFilter):
+    """Custom filter for tasks based on task type"""
+    title = _('Задача')
+    parameter_name = 'question__task'
+
+    def lookups(self, request, model_admin):
+        tasks = Task.objects.filter(task_type=TaskType.SURVEY).distinct()
+        return [(task.id, task.title) for task in tasks]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(question__task_id=self.value())
+        return queryset
 
 class SurveyQuestionChoiceInline(NestedTabularInline):
     """Inline choices for survey questions."""
@@ -367,6 +382,25 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         return obj.photos.exists()
     has_photos.short_description = _('Есть фото')
     has_photos.boolean = True
+    
+    def photos_display(self, obj):
+        """Display photos with click to enlarge functionality"""
+        if obj.photos.exists():
+            photos_html = []
+            for photo_obj in obj.photos.all():
+                if photo_obj.photo:
+                    # Create HTML with click to enlarge functionality
+                    photo_html = format_html(
+                        '<div style="display: inline-block; margin: 5px;">'
+                        '<a href="{}" target="_blank" title="Кликните для увеличения">'
+                        '<img src="{}" style="width: 100px; height: 100px; object-fit: cover; border: 1px solid #ddd; cursor: zoom-in;" />'
+                        '</a></div>',
+                        photo_obj.photo.url, photo_obj.photo.url
+                    )
+                    photos_html.append(photo_html)
+            return format_html('<div>{}</div>', format_html(''.join(photos_html)))
+        return '-'
+    photos_display.short_description = _('Фотоответы')
 
 @admin.register(SurveyAnswerPhoto)
 class SurveyAnswerPhotoAdmin(admin.ModelAdmin):
