@@ -384,23 +384,33 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
     has_photos.boolean = True
     
     def photos_display(self, obj):
-        """Display photos with click to enlarge functionality"""
-        if obj.photos.exists():
-            photos_html = []
-            for photo_obj in obj.photos.all():
-                if photo_obj.photo:
-                    # Create HTML with click to enlarge functionality
-                    photo_html = format_html(
-                        '<div style="display: inline-block; margin: 5px;">'
-                        '<a href="{}" target="_blank" title="Кликните для увеличения">'
-                        '<img src="{}" style="width: 100px; height: 100px; object-fit: cover; border: 1px solid #ddd; cursor: zoom-in;" />'
-                        '</a></div>',
-                        photo_obj.photo.url, photo_obj.photo.url
-                    )
-                    photos_html.append(photo_html)
-            return format_html('<div>{}</div>', format_html(''.join(photos_html)))
-        return '-'
-    photos_display.short_description = _('Фотоответы')
+        if obj.photos:
+            photo_urls = obj.photos.split(',')
+            images_html = []
+            for url in photo_urls:
+                url = url.strip()
+                if url:
+                    images_html.append(f'<img src="{url}" style="max-height: 100px; max-width: 100px; margin: 5px; cursor: pointer;" onclick="window.open(this.src);">')
+            return ''.join(images_html)
+        return "Нет фото"
+    photos_display.short_description = 'Фото'
+
+    readonly_fields = ('text_answer', 'photos_display')
+    
+    list_filter = (
+        'client',
+        'employee',
+        'moderator',
+        'created_at',
+        'task__task_type',
+        'task'
+    )
+
+    def text_answer_preview(self, obj):
+        return obj.text_answer[:50] + '...' if len(obj.text_answer) > 50 else obj.text_answer
+    text_answer_preview.short_description = 'Текст ответа (превью)'
+
+admin.site.register(SurveyAnswer, SurveyAnswerAdmin)
 
 @admin.register(SurveyAnswerPhoto)
 class SurveyAnswerPhotoAdmin(admin.ModelAdmin):

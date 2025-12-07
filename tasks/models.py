@@ -240,6 +240,13 @@ class SurveyAnswer(models.Model):
     """
     Survey answer model storing user responses.
     """
+    created_by = models.ForeignKey(
+                                    User,
+                                    on_delete=models.CASCADE,
+                                    related_name='created_answers',
+                                    null=True,
+                                    blank=True
+                                )
     question = models.ForeignKey(
         SurveyQuestion,
         on_delete=models.CASCADE,
