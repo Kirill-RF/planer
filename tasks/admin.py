@@ -6,12 +6,18 @@ from django.db import models
 from django.urls import path, reverse
 from django.shortcuts import render, get_object_or_404
 from django.utils.html import format_html
+from django.http import HttpResponse
+from django.utils import timezone
+from datetime import timedelta
 from nested_admin import NestedModelAdmin, NestedStackedInline, NestedTabularInline
 from .models import (
     Task, TaskStatus, TaskType, SurveyQuestion, 
     SurveyQuestionChoice, SurveyAnswer, PhotoReport, PhotoReportItem,
     SurveyAnswerPhoto
 )
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 class SurveyQuestionChoiceInline(NestedTabularInline):
     """Inline choices for survey questions."""
@@ -340,11 +346,30 @@ class TaskAdmin(NestedModelAdmin):
             return None
 
 # Остальные регистрации моделей...
-@admin.register(SurveyAnswer)
 class SurveyAnswerAdmin(admin.ModelAdmin):
     list_display = ('user', 'question', 'client', 'get_selected_choices', 'text_answer_preview', 'has_photos', 'created_at')
     readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at')
     list_per_page = 20
+    change_list_template = 'admin/tasks/surveyanswer_change_list.html'
+    
+    # Add filters
+    list_filter = (
+        'created_at',
+        'user', 
+        'question__task',
+        'question',
+        'client',
+    )
+    
+    # Search fields for autocomplete functionality
+    search_fields = (
+        'client__name__icontains',  # For client search
+        'user__username__icontains',  # For user search
+        'user__first_name__icontains',  # For user first name
+        'user__last_name__icontains',  # For user last name
+        'question__task__title__icontains',  # For task search
+        'question__question_text__icontains',  # For question search
+    )
     
     def has_add_permission(self, request):
         return False
@@ -367,6 +392,195 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         return obj.photos.exists()
     has_photos.short_description = _('Есть фото')
     has_photos.boolean = True
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('user', 'question', 'client').prefetch_related('photos', 'selected_choices')
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('surveyanswer/', 
+                 self.admin_site.admin_view(self.survey_answer_list_view), 
+                 name='surveyanswer_list'),
+            path('export-excel/<int:task_id>/', 
+                 self.admin_site.admin_view(self.export_excel_view), 
+                 name='export_survey_answers_excel'),
+        ]
+        return custom_urls + urls
+
+    def survey_answer_list_view(self, request):
+        """Custom view for survey answers with filters and search functionality."""
+        from django.contrib.admin import site
+        from django.contrib.admin.views.main import ChangeList
+        from django.contrib.admin.options import IncorrectLookupParameters
+        from django.core.paginator import Paginator
+        
+        # Get all survey answers with related data
+        queryset = self.get_queryset(request)
+        
+        # Apply filters
+        if request.GET.get('client'):
+            queryset = queryset.filter(client__id=request.GET.get('client'))
+        
+        if request.GET.get('user'):
+            queryset = queryset.filter(user__id=request.GET.get('user'))
+        
+        if request.GET.get('moderator'):
+            queryset = queryset.filter(question__task__created_by__id=request.GET.get('moderator'))
+        
+        if request.GET.get('task_type'):
+            queryset = queryset.filter(question__task__task_type=request.GET.get('task_type'))
+        
+        if request.GET.get('task'):
+            queryset = queryset.filter(question__task__id=request.GET.get('task'))
+        
+        # Date filters
+        if request.GET.get('date_filter'):
+            date_filter = request.GET.get('date_filter')
+            if date_filter == 'today':
+                queryset = queryset.filter(created_at__date=timezone.now().date())
+            elif date_filter == 'yesterday':
+                yesterday = timezone.now().date() - timedelta(days=1)
+                queryset = queryset.filter(created_at__date=yesterday)
+            elif date_filter == 'week':
+                week_ago = timezone.now().date() - timedelta(days=7)
+                queryset = queryset.filter(created_at__date__gte=week_ago)
+        
+        # Date range filter
+        if request.GET.get('date_from') and request.GET.get('date_to'):
+            from_date = request.GET.get('date_from')
+            to_date = request.GET.get('date_to')
+            queryset = queryset.filter(created_at__date__gte=from_date, created_at__date__lte=to_date)
+        
+        # Client name search
+        if request.GET.get('client_search'):
+            client_search = request.GET.get('client_search')
+            queryset = queryset.filter(client__name__icontains=client_search)
+        
+        # Task name search
+        if request.GET.get('task_search'):
+            task_search = request.GET.get('task_search')
+            queryset = queryset.filter(question__task__title__icontains=task_search)
+        
+        # Order by latest first
+        queryset = queryset.order_by('-created_at')
+        
+        # Pagination
+        paginator = Paginator(queryset, 20)
+        page_number = request.GET.get('page', 1)
+        page_obj = paginator.get_page(page_number)
+        
+        # Get distinct clients, users, moderators, tasks for filter dropdowns
+        from clients.models import Client
+        from users.models import CustomUser
+        from .models import Task
+        
+        clients = Client.objects.all()
+        users = CustomUser.objects.filter(role='EMPLOYEE')
+        moderators = CustomUser.objects.filter(role='MODERATOR')
+        tasks = Task.objects.filter(task_type='SURVEY')
+        
+        context = {
+            'title': _('Ответы на задачи'),
+            'page_obj': page_obj,
+            'clients': clients,
+            'users': users,
+            'moderators': moderators,
+            'tasks': tasks,
+            'current_filters': request.GET,
+            'opts': self.model._meta,
+        }
+        
+        return render(request, 'admin/tasks/surveyanswer_list.html', context)
+
+    def export_excel_view(self, request, task_id):
+        """Export survey answers for a specific task to Excel."""
+        from .models import Task
+        
+        try:
+            task = Task.objects.get(id=task_id)
+        except Task.DoesNotExist:
+            return HttpResponse("Task not found", status=404)
+        
+        # Get all answers for this task
+        answers = SurveyAnswer.objects.filter(
+            question__task=task
+        ).select_related(
+            'user', 'question', 'client'
+        ).prefetch_related(
+            'photos', 'selected_choices'
+        ).order_by('client__name', 'question__order', 'created_at')
+        
+        # Create Excel workbook
+        workbook = openpyxl.Workbook()
+        worksheet = workbook.active
+        worksheet.title = f"Ответы {task.title[:30]}"  # Limit sheet name length
+        
+        # Define headers
+        headers = [
+            'Клиент', 'Сотрудник', 'Дата ответа', 'Вопрос', 'Тип вопроса', 
+            'Выбранные варианты', 'Текстовый ответ', 'Количество фото'
+        ]
+        
+        # Write headers
+        for col_num, header in enumerate(headers, 1):
+            cell = worksheet.cell(row=1, column=col_num, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='D3D3D3', end_color='D3D3D3', fill_type='solid')
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Write data
+        row_num = 2
+        for answer in answers:
+            # Get selected choices as text
+            selected_choices_text = ', '.join([choice.choice_text for choice in answer.selected_choices.all()])
+            
+            # Count photos
+            photo_count = answer.photos.count()
+            
+            row_data = [
+                answer.client.name,
+                answer.user.get_full_name() or answer.user.username,
+                answer.created_at.strftime('%d.%m.%Y %H:%M:%S'),
+                answer.question.question_text,
+                answer.question.get_question_type_display(),
+                selected_choices_text,
+                answer.text_answer,
+                photo_count
+            ]
+            
+            for col_num, value in enumerate(row_data, 1):
+                cell = worksheet.cell(row=row_num, column=col_num, value=str(value) if value is not None else '')
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+            
+            row_num += 1
+        
+        # Auto-adjust column widths
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            
+            adjusted_width = min(max_length + 2, 50)  # Limit width to 50
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        # Prepare response
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="survey_answers_{task.title.replace(" ", "_")}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        
+        workbook.save(response)
+        return response
+
+@admin.register(SurveyAnswer)
+class SurveyAnswerAdminWrapper(SurveyAnswerAdmin):
+    pass
 
 @admin.register(SurveyAnswerPhoto)
 class SurveyAnswerPhotoAdmin(admin.ModelAdmin):

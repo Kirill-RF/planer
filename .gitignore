@@ -1,4 +1,16 @@
-```gitignore
+```
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
 # Python
 __pycache__/
 *.pyc
@@ -8,38 +20,74 @@ __pycache__/
 env/
 venv/
 .venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
+.venv-local/
+.venv-dev/
+.venv-test/
+.venv-prod/
+.venv-staging/
+.venv-*
+.ENV
+.env.backup
+.env.local.backup
+.env.backup.*
+.env.local.backup.*
+.env.*
+.env.local.*
+.env.*.backup
+.env.local.*.backup
+
+# Coverage
 .coverage
+coverage/
+htmlcov/
 .coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-*.pot
-*.pyc
-*.pyo
+.coverage.*.*
+
+# Testing
 .pytest_cache/
-.mypy_cache/
-.hypothesis/
+.nosetests
+.noseids
+.noseids.*
+.noseids.*.*
+.noseids.*
+.noseids.*.*
+.noseids.*.*
+.noseids.*.*
 
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media/
-staticfiles/
-.DS_Store
+# Distribution / packaging
+.Python
+.build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Excel files (if they are generated/temporary)
-*.xlsx
-*.xls
-
-# Temporary files
-*.tmp
+# IDEs
+.vscode/
+.idea/
 *.swp
+*.swo
 *~
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db.*
+*.sqlite
+*.sqlite3
+
+# Cookies
+cookies.txt
 ```
