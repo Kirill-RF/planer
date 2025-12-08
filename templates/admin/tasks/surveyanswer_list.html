@@ -25,14 +25,15 @@
         display: flex;
         flex-wrap: wrap;
         gap: 15px;
-        align-items: center;
+        align-items: flex-start;
         margin-bottom: 10px;
     }
     
     .filter-item {
         display: flex;
         flex-direction: column;
-        min-width: 200px;
+        min-width: 150px;
+        max-width: 250px;
     }
     
     .filter-item label {
@@ -45,6 +46,23 @@
         padding: 5px;
         border: 1px solid #ccc;
         border-radius: 3px;
+    }
+    
+    .filter-item-wide {
+        min-width: 300px;
+        flex: 1;
+    }
+    
+    .filter-row.compact {
+        gap: 10px;
+    }
+    
+    .filter-row.compact .filter-item {
+        min-width: 120px;
+    }
+    
+    .filter-row.compact .filter-item-wide {
+        min-width: 200px;
     }
     
     .filter-buttons {
@@ -147,12 +165,15 @@
     
     <!-- Filter Section -->
     <div class="filter-container">
-        <h3>Фильтры</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3>Фильтры</h3>
+            <a href="{% url 'admin:surveyanswer_list' %}" class="button">Сбросить фильтры</a>
+        </div>
         <form method="GET" id="filter-form">
-            <div class="filter-row">
-                <div class="filter-item">
-                    <label for="client">Клиент:</label>
-                    <input type="text" id="client-search" name="client_search" placeholder="Поиск по имени клиента..." value="{{ current_filters.client_search|default:'' }}">
+            <div class="filter-row compact" style="flex-wrap: wrap;">
+                <div class="filter-item" style="min-width: 180px; max-width: 220px;">
+                    <label for="client-search">Клиент:</label>
+                    <input type="text" id="client-search" name="client_search" placeholder="Поиск..." value="{{ current_filters.client_search|default:'' }}">
                     <select name="client" id="client-select">
                         <option value="">Все клиенты</option>
                         {% for client in clients %}
@@ -163,7 +184,20 @@
                     </select>
                 </div>
                 
-                <div class="filter-item">
+                <div class="filter-item" style="min-width: 180px; max-width: 220px;">
+                    <label for="task-search">Задача:</label>
+                    <input type="text" id="task-search" name="task_search" placeholder="Поиск..." value="{{ current_filters.task_search|default:'' }}">
+                    <select name="task" id="task-select">
+                        <option value="">Все задачи</option>
+                        {% for task in tasks %}
+                            <option value="{{ task.id }}" {% if current_filters.task|add:"0" == task.id %}selected{% endif %}>
+                                {{ task.title }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="filter-item" style="min-width: 160px; max-width: 200px;">
                     <label for="user">Сотрудник:</label>
                     <select name="user" id="user-select">
                         <option value="">Все сотрудники</option>
@@ -175,7 +209,7 @@
                     </select>
                 </div>
                 
-                <div class="filter-item">
+                <div class="filter-item" style="min-width: 160px; max-width: 200px;">
                     <label for="moderator">Модератор:</label>
                     <select name="moderator" id="moderator-select">
                         <option value="">Все модераторы</option>
@@ -186,10 +220,8 @@
                         {% endfor %}
                     </select>
                 </div>
-            </div>
-            
-            <div class="filter-row">
-                <div class="filter-item">
+                
+                <div class="filter-item" style="min-width: 180px; max-width: 200px;">
                     <label for="task_type">Тип задачи:</label>
                     <select name="task_type" id="task_type-select">
                         <option value="">Все типы</option>
@@ -199,20 +231,7 @@
                     </select>
                 </div>
                 
-                <div class="filter-item">
-                    <label for="task">Задача:</label>
-                    <input type="text" id="task-search" name="task_search" placeholder="Поиск по названию задачи..." value="{{ current_filters.task_search|default:'' }}">
-                    <select name="task" id="task-select">
-                        <option value="">Все задачи</option>
-                        {% for task in tasks %}
-                            <option value="{{ task.id }}" {% if current_filters.task|add:"0" == task.id %}selected{% endif %}>
-                                {{ task.title }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="filter-item">
+                <div class="filter-item" style="min-width: 140px; max-width: 160px;">
                     <label for="date_filter">Дата:</label>
                     <select name="date_filter" id="date_filter-select">
                         <option value="">Все даты</option>
@@ -221,15 +240,13 @@
                         <option value="week" {% if current_filters.date_filter == 'week' %}selected{% endif %}>Неделя</option>
                     </select>
                 </div>
-            </div>
-            
-            <div class="filter-row">
-                <div class="filter-item">
+                
+                <div class="filter-item" style="min-width: 140px;">
                     <label for="date_from">С даты:</label>
                     <input type="date" name="date_from" id="date_from" value="{{ current_filters.date_from|default:'' }}">
                 </div>
                 
-                <div class="filter-item">
+                <div class="filter-item" style="min-width: 140px;">
                     <label for="date_to">По дату:</label>
                     <input type="date" name="date_to" id="date_to" value="{{ current_filters.date_to|default:'' }}">
                 </div>
@@ -237,7 +254,6 @@
             
             <div class="filter-buttons">
                 <button type="submit" class="default">Применить фильтры</button>
-                <a href="?">Сбросить фильтры</a>
             </div>
         </form>
     </div>
@@ -253,6 +269,11 @@
             {% endfor %}
         </select>
         <button onclick="exportToExcel()" class="default">Экспортировать в Excel</button>
+    </div>
+    
+    <!-- Link to Tasks Page -->
+    <div style="margin-top: 20px; padding: 10px; background: #f0f8ff; border: 1px solid #b0d4ff; border-radius: 4px;">
+        <a href="{% url 'admin:tasks_task_changelist' %}" style="display: inline-block; padding: 8px 15px; background: #007cba; color: white; text-decoration: none; border-radius: 3px;">Перейти на страницу задач</a>
     </div>
     
     <!-- Results Table -->
@@ -356,14 +377,14 @@
 </div>
 
 <script>
-// Client search with autocomplete
+// Client search with autocomplete - case insensitive
 const clientSearchInput = document.getElementById('client-search');
 if (clientSearchInput) {
     clientSearchInput.addEventListener('input', function() {
         const searchTerm = this.value.toLowerCase();
         const select = document.getElementById('client-select');
         
-        // Show/hide options based on search term
+        // Show/hide options based on search term (case insensitive)
         for (let i = 0; i < select.options.length; i++) {
             const option = select.options[i];
             if (option.text.toLowerCase().includes(searchTerm) || searchTerm === '') {
@@ -387,14 +408,14 @@ if (clientSearchInput) {
     });
 }
 
-// Task search with autocomplete
+// Task search with autocomplete - case insensitive
 const taskSearchInput = document.getElementById('task-search');
 if (taskSearchInput) {
     taskSearchInput.addEventListener('input', function() {
         const searchTerm = this.value.toLowerCase();
         const select = document.getElementById('task-select');
         
-        // Show/hide options based on search term
+        // Show/hide options based on search term (case insensitive)
         for (let i = 0; i < select.options.length; i++) {
             const option = select.options[i];
             if (option.text.toLowerCase().includes(searchTerm) || searchTerm === '') {

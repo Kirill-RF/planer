@@ -453,12 +453,12 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
             to_date = request.GET.get('date_to')
             queryset = queryset.filter(created_at__date__gte=from_date, created_at__date__lte=to_date)
         
-        # Client name search
+        # Client name search - case insensitive
         if request.GET.get('client_search'):
             client_search = request.GET.get('client_search')
             queryset = queryset.filter(client__name__icontains=client_search)
         
-        # Task name search
+        # Task name search - case insensitive
         if request.GET.get('task_search'):
             task_search = request.GET.get('task_search')
             queryset = queryset.filter(question__task__title__icontains=task_search)
@@ -482,7 +482,7 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         tasks = Task.objects.filter(task_type='SURVEY')
         
         context = {
-            'title': _('Ответы на задачи'),
+            'title': _('Ответы на вопросы'),
             'page_obj': page_obj,
             'clients': clients,
             'users': users,

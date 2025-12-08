@@ -1,93 +1,29 @@
-```
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Logs
-*.log
-
-# Temporary files
-*.tmp
-*.swp
-
+```gitignore
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
-.venv/
-.venv-local/
-.venv-dev/
-.venv-test/
-.venv-prod/
-.venv-staging/
-.venv-*
-.ENV
-.env.backup
-.env.local.backup
-.env.backup.*
-.env.local.backup.*
-.env.*
-.env.local.*
-.env.*.backup
-.env.local.*.backup
 
-# Coverage
-.coverage
-coverage/
-htmlcov/
-.coverage.*
-.coverage.*.*
+# Logs
+*.log
+server.log
 
-# Testing
-.pytest_cache/
-.nosetests
-.noseids
-.noseids.*
-.noseids.*.*
-.noseids.*
-.noseids.*.*
-.noseids.*.*
-.noseids.*.*
+# Django
+*.pot
+*.pyo
+*.mo
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
 
-# Distribution / packaging
-.Python
-.build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# IDEs
+# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
 
-# Database
-*.db
-*.db.*
-*.sqlite
-*.sqlite3
-
-# Cookies
-cookies.txt
+# Environment
+.env
+.env.local
+.env.*
 ```
