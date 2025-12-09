@@ -12,4 +12,6 @@ urlpatterns = [
     # New API endpoints for photo report statistics
     path('api/photo-report-stats/', views.photo_report_stats, name='photo_report_stats'),
     path('api/create-evaluation/', views.create_evaluation, name='create_evaluation'),
+    path('api/equipment-report-questions/<int:report_id>/', views.get_equipment_report_questions, name='get_equipment_report_questions'),
+    path('api/submit-equipment-report-answer/', views.submit_equipment_report_answer, name='submit_equipment_report_answer'),
 ]

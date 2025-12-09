@@ -6,7 +6,9 @@ that will be used in API endpoints.
 """
 
 from rest_framework import serializers
-from .models import EquipmentReport, Evaluation, Photo
+from .models import (EquipmentReport, Evaluation, Photo, 
+                    EquipmentPhotoReportQuestion, EquipmentPhotoReportQuestionChoice, 
+                    EquipmentPhotoReportAnswer, EquipmentPhotoReportAnswerPhoto)
 from tasks.models import Task
 from users.models import CustomUser
 from clients.models import Client
@@ -174,3 +176,104 @@ class PhotoReportStatsSerializer(serializers.Serializer):
     employee_name = serializers.CharField()
     reports = EquipmentReportSerializer(many=True)
     evaluation = EvaluationSerializer(required=False, allow_null=True)
+
+
+class EquipmentPhotoReportQuestionChoiceSerializer(serializers.ModelSerializer):
+    """
+    Serializer for EquipmentPhotoReportQuestionChoice model.
+    
+    Parameters
+    ----------
+    id : int
+        Choice ID
+    choice_text : str
+        Text of the choice
+    is_correct : bool
+        Whether this is the correct answer
+    order : int
+        Display order
+    """
+    
+    class Meta:
+        model = EquipmentPhotoReportQuestionChoice
+        fields = ['id', 'choice_text', 'is_correct', 'order']
+
+
+class EquipmentPhotoReportQuestionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for EquipmentPhotoReportQuestion model.
+    
+    Parameters
+    ----------
+    id : int
+        Question ID
+    question_text : str
+        Text of the question
+    order : int
+        Display order
+    question_type : str
+        Type of the question
+    choices : list
+        List of possible choices (for multiple choice questions)
+    """
+    
+    choices = EquipmentPhotoReportQuestionChoiceSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = EquipmentPhotoReportQuestion
+        fields = ['id', 'question_text', 'order', 'question_type', 'choices']
+        read_only_fields = ['choices']
+
+
+class EquipmentPhotoReportAnswerPhotoSerializer(serializers.ModelSerializer):
+    """
+    Serializer for EquipmentPhotoReportAnswerPhoto model.
+    
+    Parameters
+    ----------
+    id : int
+        Photo ID
+    photo : ImageField
+        Photo file
+    description : str
+        Description of the photo
+    created_at : datetime
+        Creation timestamp
+    """
+    
+    class Meta:
+        model = EquipmentPhotoReportAnswerPhoto
+        fields = ['id', 'photo', 'description', 'created_at']
+        read_only_fields = ['created_at']
+
+
+class EquipmentPhotoReportAnswerSerializer(serializers.ModelSerializer):
+    """
+    Serializer for EquipmentPhotoReportAnswer model.
+    
+    Parameters
+    ----------
+    id : int
+        Answer ID
+    question : EquipmentPhotoReportQuestion
+        The question being answered
+    user : CustomUser
+        User who provided the answer
+    selected_choices : list
+        Selected choices (for multiple choice questions)
+    text_answer : str
+        Text answer (for text questions)
+    client : Client
+        Client related to the answer
+    photos : list
+        Photos attached to the answer
+    created_at : datetime
+        Creation timestamp
+    """
+    
+    photos = EquipmentPhotoReportAnswerPhotoSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = EquipmentPhotoReportAnswer
+        fields = ['id', 'question', 'user', 'selected_choices', 'text_answer', 'client', 'photos', 'created_at']
+        read_only_fields = ['created_at', 'photos']

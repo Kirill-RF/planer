@@ -21,7 +21,9 @@ from .models import EquipmentReport, Evaluation, Photo
 from .serializers import (
     EquipmentReportSerializer, 
     EvaluationSerializer, 
-    PhotoReportStatsSerializer
+    PhotoReportStatsSerializer,
+    EquipmentPhotoReportQuestionSerializer,
+    EquipmentPhotoReportAnswerSerializer
 )
 from users.models import CustomUser, UserRoles
 from clients.models import Client
@@ -233,6 +235,53 @@ def create_evaluation(request):
         evaluation = serializer.save()
         return Response(
             EvaluationSerializer(evaluation).data, 
+            status=status.HTTP_201_CREATED
+        )
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_equipment_report_questions(request, report_id):
+    """
+    API endpoint to get questions for equipment report.
+    
+    Parameters
+    ----------
+    report_id : int
+        ID of the equipment report
+    """
+    try:
+        report = EquipmentReport.objects.get(id=report_id)
+    except EquipmentReport.DoesNotExist:
+        return Response(
+            {'error': 'Отчет по оборудованию не найден'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    questions = EquipmentPhotoReportQuestion.objects.filter(report=report).prefetch_related('choices')
+    serializer = EquipmentPhotoReportQuestionSerializer(questions, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_equipment_report_answer(request):
+    """
+    API endpoint to submit answer to equipment report question.
+    """
+    if request.user.role != UserRoles.EMPLOYEE:
+        return Response(
+            {'error': 'Только сотрудники могут отвечать на вопросы'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    serializer = EquipmentPhotoReportAnswerSerializer(data=request.data, context={'request': request})
+    if serializer.is_valid():
+        answer = serializer.save()
+        return Response(
+            EquipmentPhotoReportAnswerSerializer(answer).data, 
             status=status.HTTP_201_CREATED
         )
     
