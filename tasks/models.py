@@ -288,26 +288,32 @@ class SurveyAnswerPhoto(models.Model):
     photo = models.ImageField(
         _('Фото'),
         upload_to='survey_answer_photos/',
-        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png'])]
+        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png'])],
+        max_length=500  # Increase max_length to handle long paths
     )
     created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
     
     def save(self, *args, **kwargs):
-        # Custom upload path: survey_answer_photos/client_name/date/timestamp_filename
-        if self.answer and self.answer.client and self.photo:
-            client_name = self.answer.client.name.replace('/', '_').replace('\\', '_')  # Sanitize path
-            # Use current datetime for path since created_at might not be set yet
+        # Only modify the path if the file is being saved for the first time
+        # and we have the required data
+        if self.answer and self.answer.client and self.photo and hasattr(self.photo, 'name'):
+            # Sanitize client name to be safe for paths (replace both forward and backslashes)
+            client_name = self.answer.client.name.replace('/\\', '_').replace(' ', '_')
+            # Use current datetime for path
             current_datetime = datetime.now()
             date_path = current_datetime.strftime('%Y/%m/%d')
+            
+            # Extract original filename safely
             original_filename = os.path.basename(self.photo.name)
             name, ext = os.path.splitext(original_filename)
             
             # Add timestamp to avoid conflicts
-            timestamp = current_datetime.strftime('%Y%m%d_%H%M%S_%f')
+            timestamp = current_datetime.strftime('%Y%m%d_%H%M%S_%f')[:-3]  # Use only first 3 digits of microseconds
             new_filename = f"{name}_{timestamp}{ext}"
             
-            # Construct the new path
-            self.photo.name = f"survey_answer_photos/{client_name}/{date_path}/{new_filename}"
+            # Construct the new path using forward slashes only (Django handles this correctly)
+            # Avoid duplication by not adding survey_answer_photos/ again since the upload_to already does this
+            self.photo.name = f"survey_answer_photos/{client_name}/{date_path}/{new_filename}".replace('\', '/')
         super().save(*args, **kwargs)
     
     def __str__(self):

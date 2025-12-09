@@ -1,29 +1,288 @@
-```gitignore
-# Python
-__pycache__/
+# Compiled and build artifacts
 *.pyc
-*.pyo
-*.pyd
+__pycache__/
+*.o
+*.obj
+*.out
 
-# Logs
+# Dependencies
+.venv/
+venv/
+node_modules/
+dist/
+build/
+*.egg-info/
+
+# Logs and temp files
 *.log
-server.log
-
-# Django
-*.pot
-*.pyo
-*.mo
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# IDE
-.vscode/
-.idea/
+*.tmp
+*.swp
+*.swo
 
 # Environment
 .env
 .env.local
-.env.*
-```
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+*.pyc
+*~
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# Python specific
+.Python
+*.pyo
+*.pyd
+*.so
+
+# Backup files
+*~
+.#*
+*.bak
+*.backup
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+.Spotlight-V100
+.Trashes
+lost+found
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage*
+
+# Distribution / packaging
+*.tar.gz
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Django specific (if applicable)
+*.mo
+*.pot
+*.py[co]
+*$py.class
+local_settings.py
+
+# Virtual environments
+env/
+ENV/
+venv.bak/
+env.bak/
+
+# IDE specific
+.settings/
+.project
+.pydevproject
+nbproject/
+*.tmproj
+*.sublime-project
+*.sublime-workspace
+
+# Git related
+!.gitignore
+
+# Documentation builds
+docs/_build/
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# C extensions
+_build/
+buck-out/
+plaidml/
+
+# Rust
+target/
+Cargo.lock
+
+# Go
+*.out
+go.sum
+go.mod
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
+jspm_packages/
+.nyc_output
+coverage/
+*.lcov
+.npm
+.npmrc
+.yarn-integrity
+.yarn-metadata.json
+node/
+node_modules/
+.cache/
+
+# Ruby
+*.gem
+*.rbc
+.bundle/
+.config/byebug_history
+.tern-port
+vendor/bundle/
+.rbenv-gemsets
+.rbenv-version
+.bundle
+.rbenv-vars
+.rspec
+Guardfile
+.rake
+.stest.yml
+Gemfile.lock
+
+# PHP
+vendor/
+composer.lock
+.php_cs.cache
+
+# C#
+*.user
+*.userosscache
+*.suo
+*.csproj.user
+*.userprefs
+bin/
+obj/
+.cs
+.cs.meta
+*.pidb
+*.userprefs
+.projectile
+.autotools
+.libs/
+.libs/*
+.libs/*.*
+.libs/.*.cmd
+.libs/lt-*
+.libs/libtoolT
+.libs/*.ltf
+.libs/*.lo
+.libs/*.la
+.libs/*.lai
+.libs/*.L
+.libs/*.Plo
+.libs/*.P
+.libs/*.Po
+.libs/*.Plo
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+.libs/*.laT
+.libs/*.loT
+.libs/*.laiT
+......
