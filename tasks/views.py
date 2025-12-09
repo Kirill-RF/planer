@@ -27,6 +27,10 @@ from clients.models import Client
 from django.db.models import Count, Sum, Avg, Q
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
+from django.shortcuts import render, get_object_or_404
+from django.utils.dateparse import parse_date
+from datetime import datetime, date
+from .models import PhotoReport, PhotoReportItem, EquipmentPhotoEvaluation
 
 class TaskListView(LoginRequiredMixin, ListView):
     """
@@ -487,6 +491,160 @@ def survey_statistics_view(self, request, task_id):
         'opts': self.model._meta,
     }
     return render(request, 'admin/tasks/survey_statistics.html', context)
+
+
+class EquipmentPhotoReportStatsView(LoginRequiredMixin, TemplateView):
+    """
+    View for displaying equipment photo report statistics with dual date comparison.
+    """
+    template_name = 'tasks/equipment_photo_report_stats.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        task_id = self.kwargs['task_id']
+        task = get_object_or_404(Task, id=task_id)
+        
+        if not task.can_be_edited_by(self.request.user):
+            raise PermissionDenied(_("У вас нет прав для просмотра статистики этой задачи"))
+        
+        context['task'] = task
+        context['title'] = _('Статистика фотоотчета по оборудованию')
+        
+        # Получаем параметры фильтрации
+        left_date = self.request.GET.get('left_date')
+        right_date_from = self.request.GET.get('right_date_from')
+        right_date_to = self.request.GET.get('right_date_to')
+        client_id = self.request.GET.get('client_id')
+        employee_id = self.request.GET.get('employee_id')
+        
+        # Парсим даты
+        left_date_parsed = parse_date(left_date) if left_date else None
+        right_date_from_parsed = parse_date(right_date_from) if right_date_from else None
+        right_date_to_parsed = parse_date(right_date_to) if right_date_to else None
+        
+        # Фильтруем фотоотчеты
+        photo_reports = PhotoReport.objects.filter(task=task)
+        
+        # Применяем фильтры
+        if client_id and client_id != 'all':
+            photo_reports = photo_reports.filter(client_id=client_id)
+        
+        if employee_id and employee_id != 'all':
+            photo_reports = photo_reports.filter(created_by_id=employee_id)
+        
+        # Получаем фото для левой части (одна дата)
+        left_photos = []
+        if left_date_parsed:
+            left_photos = PhotoReportItem.objects.filter(
+                report__task=task,
+                created_at__date=left_date_parsed
+            )
+            if client_id and client_id != 'all':
+                left_photos = left_photos.filter(report__client_id=client_id)
+            if employee_id and employee_id != 'all':
+                left_photos = left_photos.filter(report__created_by_id=employee_id)
+        
+        # Получаем фото для правой части (диапазон дат)
+        right_photos = []
+        if right_date_from_parsed or right_date_to_parsed:
+            date_filter = Q()
+            if right_date_from_parsed:
+                date_filter &= Q(created_at__date__gte=right_date_from_parsed)
+            if right_date_to_parsed:
+                date_filter &= Q(created_at__date__lte=right_date_to_parsed)
+            
+            right_photos = PhotoReportItem.objects.filter(
+                report__task=task
+            ).filter(date_filter)
+            
+            if client_id and client_id != 'all':
+                right_photos = right_photos.filter(report__client_id=client_id)
+            if employee_id and employee_id != 'all':
+                right_photos = right_photos.filter(report__created_by_id=employee_id)
+        
+        # Добавляем оценки к фото
+        for photo in left_photos:
+            try:
+                photo.evaluation = photo.evaluation
+            except EquipmentPhotoEvaluation.DoesNotExist:
+                photo.evaluation = None
+        
+        for photo in right_photos:
+            try:
+                photo.evaluation = photo.evaluation
+            except EquipmentPhotoEvaluation.DoesNotExist:
+                photo.evaluation = None
+        
+        # Получаем список клиентов и сотрудников для фильтров
+        context['clients'] = Client.objects.all().order_by('name')
+        context['employees'] = CustomUser.objects.filter(role=UserRoles.EMPLOYEE).order_by('username')
+        
+        # Данные для шаблона
+        context['left_photos'] = left_photos
+        context['right_photos'] = right_photos
+        context['left_date'] = left_date
+        context['right_date_from'] = right_date_from
+        context['right_date_to'] = right_date_to
+        context['selected_client_id'] = client_id
+        context['selected_employee_id'] = employee_id
+        
+        return context
+
+
+def evaluate_equipment_photo(request, photo_item_id):
+    """
+    View for evaluating equipment photo by moderator.
+    """
+    if request.method == 'POST' and request.user.role == 'MODERATOR':
+        photo_item = get_object_or_404(PhotoReportItem, id=photo_item_id)
+        
+        # Получаем данные из формы
+        filling_score = request.POST.get('filling_score')
+        foreign_goods_score = request.POST.get('foreign_goods_score')
+        design_score = request.POST.get('design_score')
+        filling_comment = request.POST.get('filling_comment', '')
+        foreign_goods_comment = request.POST.get('foreign_goods_comment', '')
+        design_comment = request.POST.get('design_comment', '')
+        needs_rework = request.POST.get('needs_rework') == 'on'
+        
+        # Создаем или обновляем оценку
+        evaluation, created = EquipmentPhotoEvaluation.objects.get_or_create(
+            photo_report_item=photo_item,
+            defaults={'evaluator': request.user}
+        )
+        
+        evaluation.filling_score = filling_score if filling_score else None
+        evaluation.foreign_goods_score = foreign_goods_score if foreign_goods_score else None
+        evaluation.design_score = design_score if design_score else None
+        evaluation.filling_comment = filling_comment
+        evaluation.foreign_goods_comment = foreign_goods_comment
+        evaluation.design_comment = design_comment
+        evaluation.needs_rework = needs_rework
+        
+        # Если требует доработки, создаем задачу
+        if needs_rework:
+            rework_task = Task.objects.create(
+                title=f"Доработка фотоотчета для {photo_item.report.client.name}",
+                description=f"Требуется доработать фото: {photo_item.photo.url if photo_item.photo else 'Фото отсутствует'}\n\n"
+                           f"Комментарии модератора:\n"
+                           f"Наполнение: {filling_comment}\n"
+                           f"Посторонние товары: {foreign_goods_comment}\n"
+                           f"Оформление: {design_comment}",
+                task_type=TaskType.EQUIPMENT_PHOTO,
+                status=TaskStatus.SENT,
+                assigned_to=photo_item.report.created_by,
+                client=photo_item.report.client,
+                created_by=request.user
+            )
+            evaluation.rework_task = rework_task
+        
+        evaluation.save()
+        
+        messages.success(request, _("Фото успешно оценено!"))
+        return redirect('tasks:equipment_photo_report_stats', task_id=photo_item.report.task.id)
+    
+    return redirect('tasks:task_list')
+
 
 @csrf_exempt
 def search_clients(request):

@@ -14,5 +14,7 @@ urlpatterns = [
     path('my-surveys/', views.MySurveysView.as_view(), name='my_surveys'),
     path('statistics/', views.StatisticsView.as_view(), name='statistics'),
     path('search_clients/', views.search_clients, name='search_clients'),
+    path('task/<int:task_id>/equipment-photo-stats/', views.EquipmentPhotoReportStatsView.as_view(), name='equipment_photo_report_stats'),
+    path('evaluate-photo/<int:photo_item_id>/', views.evaluate_equipment_photo, name='evaluate_equipment_photo'),
 
 ]

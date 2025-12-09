@@ -540,3 +540,106 @@ class TaskStatistics(models.Model):
     
     def __str__(self):
         return f"Статистика: {self.task.title}"
+
+
+class EquipmentPhotoEvaluation(models.Model):
+    """
+    Модель оценки фотоотчета по оборудованию.
+    
+    Атрибуты
+    ----------
+    photo_report_item : PhotoReportItem
+        Элемент фотоотчета
+    evaluator : CustomUser
+        Модератор, оценивший фото
+    filling_score : int, optional
+        Оценка наполнения (1-5)
+    foreign_goods_score : int, optional
+        Оценка отсутствия посторонних товаров (1-5)
+    design_score : int, optional
+        Оценка оформления (1-5)
+    filling_comment : str, optional
+        Комментарий по наполнению
+    foreign_goods_comment : str, optional
+        Комментарий по отсутствию посторонних товаров
+    design_comment : str, optional
+        Комментарий по оформлению
+    needs_rework : bool
+        Требует ли доработки
+    rework_task : Task, optional
+        Задача на доработку
+    created_at : datetime
+        Время создания
+    updated_at : datetime
+        Время последнего обновления
+    """
+    
+    photo_report_item = models.OneToOneField(
+        'PhotoReportItem',
+        on_delete=models.CASCADE,
+        related_name='evaluation',
+        verbose_name=_('Фото отчета')
+    )
+    evaluator = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        limit_choices_to={'role': UserRoles.MODERATOR},
+        verbose_name=_('Оценивающий модератор')
+    )
+    filling_score = models.IntegerField(
+        _('Оценка наполнения'),
+        null=True,
+        blank=True,
+        choices=[(i, i) for i in range(1, 6)],
+        help_text=_('Оценка от 1 до 5')
+    )
+    foreign_goods_score = models.IntegerField(
+        _('Оценка отсутствия посторонних товаров'),
+        null=True,
+        blank=True,
+        choices=[(i, i) for i in range(1, 6)],
+        help_text=_('Оценка от 1 до 5')
+    )
+    design_score = models.IntegerField(
+        _('Оценка оформления'),
+        null=True,
+        blank=True,
+        choices=[(i, i) for i in range(1, 6)],
+        help_text=_('Оценка от 1 до 5')
+    )
+    filling_comment = models.TextField(
+        _('Комментарий по наполнению'),
+        blank=True,
+        null=True
+    )
+    foreign_goods_comment = models.TextField(
+        _('Комментарий по отсутствию посторонних товаров'),
+        blank=True,
+        null=True
+    )
+    design_comment = models.TextField(
+        _('Комментарий по оформлению'),
+        blank=True,
+        null=True
+    )
+    needs_rework = models.BooleanField(
+        _('Требует доработки'),
+        default=False
+    )
+    rework_task = models.ForeignKey(
+        'Task',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('Задача на доработку')
+    )
+    created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('Обновлено'), auto_now=True)
+    
+    def __str__(self):
+        return f"Оценка фото {self.photo_report_item.id} от {self.evaluator.username}"
+    
+    class Meta:
+        verbose_name = _('Оценка фотоотчета')
+        verbose_name_plural = _('Оценки фотоотчетов')
+        ordering = ['-created_at']

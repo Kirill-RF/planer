@@ -1,0 +1,327 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-2 text-gray-800">{{ title }}</h1>
+    <p class="mb-4">{% trans 'Сравнение фотоотчетов по оборудованию за разные даты' %}</p>
+
+    <!-- Фильтры -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{% trans 'Фильтры' %}</h6>
+        </div>
+        <div class="card-body">
+            <form method="get" id="filters-form">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="left_date">{% trans 'Дата для левой части (сравнение)' %}</label>
+                        <input type="date" class="form-control" id="left_date" name="left_date" value="{{ left_date }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="right_date_from">{% trans 'Начальная дата для правой части' %}</label>
+                        <input type="date" class="form-control" id="right_date_from" name="right_date_from" value="{{ right_date_from }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="right_date_to">{% trans 'Конечная дата для правой части' %}</label>
+                        <input type="date" class="form-control" id="right_date_to" name="right_date_to" value="{{ right_date_to }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="client_id">{% trans 'Клиент' %}</label>
+                        <select class="form-control" id="client_id" name="client_id">
+                            <option value="all" {% if selected_client_id == 'all' or not selected_client_id %}selected{% endif %}>{% trans 'Все клиенты' %}</option>
+                            {% for client in clients %}
+                                <option value="{{ client.id }}" {% if selected_client_id == client.id|stringformat:"s" %}selected{% endif %}>{{ client.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <label for="employee_id">{% trans 'Сотрудник' %}</label>
+                        <select class="form-control" id="employee_id" name="employee_id">
+                            <option value="all" {% if selected_employee_id == 'all' or not selected_employee_id %}selected{% endif %}>{% trans 'Все сотрудники' %}</option>
+                            {% for employee in employees %}
+                                <option value="{{ employee.id }}" {% if selected_employee_id == employee.id|stringformat:"s" %}selected{% endif %}>{{ employee.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-9 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary">{% trans 'Применить фильтры' %}</button>
+                        <button type="button" class="btn btn-secondary ml-2" onclick="resetFilters()">{% trans 'Сбросить' %}</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Статистика по задаче -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ task.title }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">{% trans 'Фотоотчеты на дату' %} {{ left_date|default:'не выбрана' }}</h5>
+                        </div>
+                        <div class="card-body" style="height: 600px; overflow-y: auto;">
+                            {% if left_photos %}
+                                {% for photo in left_photos %}
+                                    <div class="photo-item mb-3 p-2 border rounded">
+                                        <div class="photo-header d-flex justify-content-between align-items-center">
+                                            <strong>{{ photo.report.client.name }}</strong>
+                                            <small class="text-muted">{{ photo.created_at }}</small>
+                                        </div>
+                                        <div class="photo-content text-center">
+                                            <img src="{{ photo.photo.url }}" class="img-fluid img-thumbnail" 
+                                                 alt="Фото отчета" style="max-height: 200px; cursor: pointer;" 
+                                                 onclick="openModal('{{ photo.photo.url }}', '{{ photo.report.client.name }}')"
+                                                 title="Кликните для увеличения">
+                                        </div>
+                                        {% if photo.evaluation %}
+                                            <div class="photo-evaluation mt-2">
+                                                <small class="text-success">
+                                                    {% trans 'Оценено модератором' %}: {{ photo.evaluation.evaluator.username }}
+                                                </small>
+                                                <div class="evaluation-details">
+                                                    {% if photo.evaluation.filling_score %}
+                                                        <span class="badge badge-info">{% trans 'Наполнение' %}: {{ photo.evaluation.filling_score }}/5</span>
+                                                    {% endif %}
+                                                    {% if photo.evaluation.foreign_goods_score %}
+                                                        <span class="badge badge-info">{% trans 'Посторонние товары' %}: {{ photo.evaluation.foreign_goods_score }}/5</span>
+                                                    {% endif %}
+                                                    {% if photo.evaluation.design_score %}
+                                                        <span class="badge badge-info">{% trans 'Оформление' %}: {{ photo.evaluation.design_score }}/5</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            {% if user.role == 'MODERATOR' %}
+                                                <div class="evaluation-form mt-2">
+                                                    <form method="post" action="{% url 'tasks:evaluate_equipment_photo' photo.id %}">
+                                                        {% csrf_token %}
+                                                        <div class="row">
+                                                            <div class="col-4">
+                                                                <label>{% trans 'Наполнение' %}:</label>
+                                                                <select name="filling_score" class="form-control form-control-sm">
+                                                                    <option value="">{% trans 'Оценка' %}</option>
+                                                                    {% for i in '12345'|make_list %}
+                                                                        <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label>{% trans 'Посторонние товары' %}:</label>
+                                                                <select name="foreign_goods_score" class="form-control form-control-sm">
+                                                                    <option value="">{% trans 'Оценка' %}</option>
+                                                                    {% for i in '12345'|make_list %}
+                                                                        <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label>{% trans 'Оформление' %}:</label>
+                                                                <select name="design_score" class="form-control form-control-sm">
+                                                                    <option value="">{% trans 'Оценка' %}</option>
+                                                                    {% for i in '12345'|make_list %}
+                                                                        <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="form-group mt-2">
+                                                            <textarea name="filling_comment" class="form-control form-control-sm" placeholder="{% trans 'Комментарий по наполнению' %}"></textarea>
+                                                        </div>
+                                                        <div class="form-group">
+                                                            <textarea name="foreign_goods_comment" class="form-control form-control-sm" placeholder="{% trans 'Комментарий по посторонним товарам' %}"></textarea>
+                                                        </div>
+                                                        <div class="form-group">
+                                                            <textarea name="design_comment" class="form-control form-control-sm" placeholder="{% trans 'Комментарий по оформлению' %}"></textarea>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input type="checkbox" name="needs_rework" class="form-check-input" id="needs_rework_{{ photo.id }}">
+                                                            <label class="form-check-label" for="needs_rework_{{ photo.id }}">{% trans 'Требует доработки' %}</label>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-success mt-1">{% trans 'Оценить' %}</button>
+                                                    </form>
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted text-center">{% trans 'Нет фото для отображения по заданным параметрам' %}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">{% trans 'Фотоотчеты за период' %} {{ right_date_from|default:'не выбрана' }} - {{ right_date_to|default:'не выбрана' }}</h5>
+                        </div>
+                        <div class="card-body" style="height: 600px; overflow-y: auto;">
+                            {% if right_photos %}
+                                {% for photo in right_photos %}
+                                    <div class="photo-item mb-3 p-2 border rounded">
+                                        <div class="photo-header d-flex justify-content-between align-items-center">
+                                            <strong>{{ photo.report.client.name }}</strong>
+                                            <small class="text-muted">{{ photo.created_at }}</small>
+                                        </div>
+                                        <div class="photo-content text-center">
+                                            <img src="{{ photo.photo.url }}" class="img-fluid img-thumbnail" 
+                                                 alt="Фото отчета" style="max-height: 200px; cursor: pointer;" 
+                                                 onclick="openModal('{{ photo.photo.url }}', '{{ photo.report.client.name }}')"
+                                                 title="Кликните для увеличения">
+                                        </div>
+                                        {% if photo.evaluation %}
+                                            <div class="photo-evaluation mt-2">
+                                                <small class="text-success">
+                                                    {% trans 'Оценено модератором' %}: {{ photo.evaluation.evaluator.username }}
+                                                </small>
+                                                <div class="evaluation-details">
+                                                    {% if photo.evaluation.filling_score %}
+                                                        <span class="badge badge-info">{% trans 'Наполнение' %}: {{ photo.evaluation.filling_score }}/5</span>
+                                                    {% endif %}
+                                                    {% if photo.evaluation.foreign_goods_score %}
+                                                        <span class="badge badge-info">{% trans 'Посторонние товары' %}: {{ photo.evaluation.foreign_goods_score }}/5</span>
+                                                    {% endif %}
+                                                    {% if photo.evaluation.design_score %}
+                                                        <span class="badge badge-info">{% trans 'Оформление' %}: {{ photo.evaluation.design_score }}/5</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            {% if user.role == 'MODERATOR' %}
+                                                <div class="evaluation-form mt-2">
+                                                    <form method="post" action="{% url 'tasks:evaluate_equipment_photo' photo.id %}">
+                                                        {% csrf_token %}
+                                                        <div class="row">
+                                                            <div class="col-4">
+                                                                <label>{% trans 'Наполнение' %}:</label>
+                                                                <select name="filling_score" class="form-control form-control-sm">
+                                                                    <option value="">{% trans 'Оценка' %}</option>
+                                                                    {% for i in '12345'|make_list %}
+                                                                        <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label>{% trans 'Посторонние товары' %}:</label>
+                                                                <select name="foreign_goods_score" class="form-control form-control-sm">
+                                                                    <option value="">{% trans 'Оценка' %}</option>
+                                                                    {% for i in '12345'|make_list %}
+                                                                        <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label>{% trans 'Оформление' %}:</label>
+                                                                <select name="design_score" class="form-control form-control-sm">
+                                                                    <option value="">{% trans 'Оценка' %}</option>
+                                                                    {% for i in '12345'|make_list %}
+                                                                        <option value="{{ forloop.counter }}">{{ forloop.counter }}</option>
+                                                                    {% endfor %}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="form-group mt-2">
+                                                            <textarea name="filling_comment" class="form-control form-control-sm" placeholder="{% trans 'Комментарий по наполнению' %}"></textarea>
+                                                        </div>
+                                                        <div class="form-group">
+                                                            <textarea name="foreign_goods_comment" class="form-control form-control-sm" placeholder="{% trans 'Комментарий по посторонним товарам' %}"></textarea>
+                                                        </div>
+                                                        <div class="form-group">
+                                                            <textarea name="design_comment" class="form-control form-control-sm" placeholder="{% trans 'Комментарий по оформлению' %}"></textarea>
+                                                        </div>
+                                                        <div class="form-check">
+                                                            <input type="checkbox" name="needs_rework" class="form-check-input" id="needs_rework_{{ photo.id }}">
+                                                            <label class="form-check-label" for="needs_rework_{{ photo.id }}">{% trans 'Требует доработки' %}</label>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-success mt-1">{% trans 'Оценить' %}</button>
+                                                    </form>
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted text-center">{% trans 'Нет фото для отображения по заданным параметрам' %}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal для увеличения фото -->
+<div class="modal fade" id="photoModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="photoModalLabel">Фото</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" class="img-fluid" alt="Увеличенное фото">
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.photo-item {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.evaluation-form {
+    background-color: #e9ecef;
+    padding: 10px;
+    border-radius: 0.375rem;
+}
+
+.evaluation-details {
+    margin-top: 5px;
+}
+
+.badge {
+    margin-right: 5px;
+    margin-bottom: 3px;
+    display: inline-block;
+}
+</style>
+
+<script>
+function openModal(imageUrl, title) {
+    document.getElementById('modalImage').src = imageUrl;
+    document.getElementById('photoModalLabel').textContent = title;
+    $('#photoModal').modal('show');
+}
+
+function resetFilters() {
+    document.getElementById('filters-form').reset();
+    window.location.href = window.location.pathname;
+}
+
+// Инициализация модальных окон Bootstrap
+$(document).ready(function() {
+    // Проверяем, если jQuery и Bootstrap загружены
+    if (typeof $ !== 'undefined' && typeof $.fn.modal !== 'undefined') {
+        // Модальные окна уже обрабатываются
+    }
+});
+</script>
+{% endblock %}

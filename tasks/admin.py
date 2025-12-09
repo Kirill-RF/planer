@@ -13,7 +13,7 @@ from nested_admin import NestedModelAdmin, NestedStackedInline, NestedTabularInl
 from .models import (
     Task, TaskStatus, TaskType, SurveyQuestion, 
     SurveyQuestionChoice, SurveyAnswer, PhotoReport, PhotoReportItem,
-    SurveyAnswerPhoto
+    SurveyAnswerPhoto, EquipmentPhotoEvaluation
 )
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
