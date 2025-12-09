@@ -313,7 +313,7 @@ class SurveyAnswerPhoto(models.Model):
             
             # Construct the new path using forward slashes only (Django handles this correctly)
             # Avoid duplication by not adding survey_answer_photos/ again since the upload_to already does this
-            self.photo.name = f"survey_answer_photos/{client_name}/{date_path}/{new_filename}".replace('\', '/')
+            self.photo.name = f"survey_answer_photos/{client_name}/{date_path}/{new_filename}".replace('\\', '/')
         super().save(*args, **kwargs)
     
     def __str__(self):
