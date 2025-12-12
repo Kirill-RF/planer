@@ -275,6 +275,48 @@ class SurveyAnswer(models.Model):
 import os
 from datetime import datetime
 
+class SurveyAnswerGroupReadStatus(models.Model):
+    """
+    Model to track when a group of survey answers is marked as read.
+    A group is defined by task, client, user, and date.
+    """
+    task = models.ForeignKey(
+        'Task',
+        on_delete=models.CASCADE,
+        verbose_name=_('Задача')
+    )
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        verbose_name=_('Клиент')
+    )
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('Пользователь')
+    )
+    date_created = models.DateField(_('Дата создания группы'), auto_now_add=True)
+    read_at = models.DateTimeField(_('Отмечено как прочитано'), null=True, blank=True)
+    read_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='read_survey_groups',
+        verbose_name=_('Прочитано пользователем')
+    )
+    created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
+    
+    def __str__(self):
+        return f"Группа: {self.task.title} - {self.client.name} - {self.user.username} ({self.date_created})"
+    
+    class Meta:
+        verbose_name = _('Статус прочтения группы ответов')
+        verbose_name_plural = _('Статусы прочтения групп ответов')
+        unique_together = ['task', 'client', 'user', 'date_created']
+        ordering = ['-created_at']
+
+
 class SurveyAnswerPhoto(models.Model):
     """
     Multiple photos for a single survey answer.
