@@ -1,45 +1,5 @@
-```gitignore
-# Python
-__pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-*.pot
-*.pyc
-*.pyo
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media/
-staticfiles/
-.DS_Store
-
-# Excel files (if they are generated/temporary)
-*.xlsx
-*.xls
-
-# Temporary files
-*.tmp
-*.swp
-*~
-```
+*.txt
+/__pycache__/
+__pycache__
+tasks/__pycache__/admin.cpython-313.pyc
