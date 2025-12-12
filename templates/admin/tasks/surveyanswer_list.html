@@ -276,74 +276,89 @@
         <a href="{% url 'admin:tasks_task_changelist' %}" style="display: inline-block; padding: 8px 15px; background: #007cba; color: white; text-decoration: none; border-radius: 3px;">Перейти на страницу задач</a>
     </div>
     
-    <!-- Results Table -->
+    <!-- Results Section with Collapsible Task Groups -->
     <div class="results">
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Клиент</th>
-                    <th>Сотрудник</th>
-                    <th>Модератор</th>
-                    <th>Задача</th>
-                    <th>Вопрос</th>
-                    <th>Дата ответа</th>
-                    <th>Выбранные варианты</th>
-                    <th>Текстовый ответ</th>
-                    <th>Фото</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for answer in page_obj %}
-                <tr>
-                    <td>{{ answer.client.name }}</td>
-                    <td>{{ answer.user.get_full_name|default:answer.user.username }}</td>
-                    <td>{{ answer.question.task.created_by.get_full_name|default:answer.question.task.created_by.username }}</td>
-                    <td>{{ answer.question.task.title }}</td>
-                    <td>{{ answer.question.question_text }}</td>
-                    <td>{{ answer.created_at|date:"d.m.Y H:i" }}</td>
-                    <td>
-                        {% if answer.selected_choices.exists %}
-                            {% for choice in answer.selected_choices.all %}
-                                {{ choice.choice_text }}{% if not forloop.last %}, {% endif %}
-                            {% endfor %}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if answer.text_answer %}
-                            {% if answer.text_answer|length > 100 %}
-                                <span class="text-answer-collapsed" onclick="toggleText(this)">
-                                    {{ answer.text_answer|truncatechars:100 }}
-                                    <br><small style="color: #0056b3;">Показать полностью...</small>
-                                </span>
-                                <div class="text-answer-expanded" style="display: none;">
-                                    {{ answer.text_answer|linebreaks }}
-                                </div>
-                            {% else %}
-                                {{ answer.text_answer|linebreaks }}
-                            {% endif %}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if answer.photos.exists %}
-                            {% for photo in answer.photos.all %}
-                                <img src="{{ photo.photo.url }}" alt="Фото" class="photo-preview" onclick="showModal('{{ photo.photo.url }}')">
-                            {% endfor %}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="9" style="text-align: center;">Нет данных для отображения</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        {% for task_group in page_obj %}
+        <div class="task-group" style="border: 1px solid #ddd; margin-bottom: 15px; border-radius: 4px; overflow: hidden;">
+            <div class="task-header" style="background: #f8f9fa; padding: 12px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="toggleTask({{ task_group.task.id }})">
+                <div>
+                    {% if task_group.is_new %}
+                        <span class="badge" style="background: #dc3545; color: white; padding: 3px 6px; border-radius: 3px; font-size: 12px; margin-right: 8px;">Новая</span>
+                    {% endif %}
+                    <strong>Задача: {{ task_group.task.title }}</strong> | 
+                    Клиент: {{ task_group.unique_clients|length }} | 
+                    Сотрудник: {{ task_group.unique_users|length }} | 
+                    Дата: {{ task_group.latest_answer_date|date:"d.m.Y H:i" }} | 
+                    Ответов: {{ task_group.answers|length }}
+                </div>
+                <span class="toggle-icon" id="toggle-{{ task_group.task.id }}">+</span>
+            </div>
+            <div class="task-content" id="content-{{ task_group.task.id }}" style="display: none; padding: 15px;">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Клиент</th>
+                            <th>Сотрудник</th>
+                            <th>Вопрос</th>
+                            <th>Дата ответа</th>
+                            <th>Выбранные варианты</th>
+                            <th>Текстовый ответ</th>
+                            <th>Фото</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for answer in task_group.answers %}
+                        <tr>
+                            <td>{{ answer.client.name }}</td>
+                            <td>{{ answer.user.get_full_name|default:answer.user.username }}</td>
+                            <td>{{ answer.question.question_text }}</td>
+                            <td>{{ answer.created_at|date:"d.m.Y H:i" }}</td>
+                            <td>
+                                {% if answer.selected_choices.exists %}
+                                    {% for choice in answer.selected_choices.all %}
+                                        {{ choice.choice_text }}{% if not forloop.last %}, {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if answer.text_answer %}
+                                    {% if answer.text_answer|length > 100 %}
+                                        <span class="text-answer-collapsed" onclick="toggleText(this)">
+                                            {{ answer.text_answer|truncatechars:100 }}
+                                            <br><small style="color: #0056b3;">Показать полностью...</small>
+                                        </span>
+                                        <div class="text-answer-expanded" style="display: none;">
+                                            {{ answer.text_answer|linebreaks }}
+                                        </div>
+                                    {% else %}
+                                        {{ answer.text_answer|linebreaks }}
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if answer.photos.exists %}
+                                    {% for photo in answer.photos.all %}
+                                        <img src="{{ photo.photo.url }}" alt="Фото" class="photo-preview" onclick="showModal('{{ photo.photo.url }}')">
+                                    {% endfor %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% empty %}
+        <div style="text-align: center; padding: 20px;">
+            <p>Нет данных для отображения</p>
+        </div>
+        {% endfor %}
         
         <!-- Pagination -->
         {% if page_obj.has_other_pages %}
