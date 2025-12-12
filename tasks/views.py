@@ -336,13 +336,30 @@ class GroupedAnswersView(LoginRequiredMixin, TemplateView):
         context['all_tasks'] = Task.objects.filter(task_type=TaskType.SURVEY).distinct()
         context['all_users'] = CustomUser.objects.filter(role='EMPLOYEE').distinct()
         context['all_clients'] = Client.objects.all().distinct()
-        return context
-    
+        
+        # Собираем статистику по анкетам
+        survey_statistics = []
+        for task in context['all_tasks']:
+            total_answers = SurveyAnswer.objects.filter(
+                question__task=task
+            ).count()
+            
+            unique_clients = SurveyAnswer.objects.filter(
+                question__task=task
+            ).values('client').distinct().count()
+            
+            # Рассчитываем процент выполнения
+            target_count = task.target_count if task.target_count > 0 else 1
+            completion_rate = round((task.current_count / target_count) * 100, 1) if target_count > 0 else 0
+            
+            survey_statistics.append({
                 'task': task,
                 'total_answers': total_answers,
                 'unique_clients': unique_clients,
                 'completion_rate': completion_rate
             })
+        
+        context['survey_statistics'] = survey_statistics
         
         # График для первой анкеты
         if context['survey_statistics']:
@@ -350,7 +367,7 @@ class GroupedAnswersView(LoginRequiredMixin, TemplateView):
             context['first_survey_chart_data'] = self.get_chart_data(first_survey['task'])
         
         return context
-    
+
     def get_chart_data(self, task):
         """Получает данные для графика по первой анкете."""
         data = {
