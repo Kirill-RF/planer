@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h2>{% trans 'Ответы на вопросы' %}</h2>
+            
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>{% trans 'Фильтры' %}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="taskFilter">{% trans 'Задача' %}</label>
+                            <select class="form-control" id="taskFilter">
+                                <option value="">{% trans 'Все задачи' %}</option>
+                                {% for task in all_tasks %}
+                                    <option value="{{ task.id }}">{{ task.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="userFilter">{% trans 'Сотрудник' %}</label>
+                            <select class="form-control" id="userFilter">
+                                <option value="">{% trans 'Все сотрудники' %}</option>
+                                {% for user in all_users %}
+                                    <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="clientFilter">{% trans 'Клиент' %}</label>
+                            <select class="form-control" id="clientFilter">
+                                <option value="">{% trans 'Все клиенты' %}</option>
+                                {% for client in all_clients %}
+                                    <option value="{{ client.id }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <button class="btn btn-primary" id="applyFilters">{% trans 'Применить фильтры' %}</button>
+                            <button class="btn btn-secondary" id="resetFilters">{% trans 'Сбросить фильтры' %}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Grouped Answers -->
+            <div id="groupedAnswersContainer">
+                <!-- Cards will be loaded here via JavaScript -->
+            </div>
+            
+            <!-- Loading indicator -->
+            <div id="loadingIndicator" class="text-center d-none">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">{% trans 'Загрузка...' %}</span>
+                </div>
+            </div>
+            
+            <!-- No results message -->
+            <div id="noResults" class="alert alert-info d-none" role="alert">
+                {% trans 'Нет результатов для отображения.' %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for image preview -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalLabel">{% trans 'Просмотр изображения' %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" class="img-fluid" alt="Preview">
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .answer-card {
+        margin-bottom: 1rem;
+        transition: box-shadow 0.3s;
+    }
+    
+    .answer-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    
+    .card-header {
+        cursor: pointer;
+    }
+    
+    .new-badge {
+        background-color: #ff6b6b;
+        color: white;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        margin-left: 0.5rem;
+    }
+    
+    .read-badge {
+        background-color: #6c757d;
+        color: white;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        margin-left: 0.5rem;
+    }
+    
+    .photo-preview {
+        max-width: 100px;
+        max-height: 100px;
+        object-fit: cover;
+        cursor: pointer;
+        margin: 0.25rem;
+    }
+    
+    .answer-detail {
+        padding: 0.75rem;
+        border-left: 3px solid #dee2e6;
+        margin: 0.5rem 0;
+    }
+    
+    .mark-read-btn {
+        margin-left: 0.5rem;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load grouped answers on page load
+    loadGroupedAnswers();
+    
+    // Apply filters
+    document.getElementById('applyFilters').addEventListener('click', loadGroupedAnswers);
+    
+    // Reset filters
+    document.getElementById('resetFilters').addEventListener('click', function() {
+        document.getElementById('taskFilter').value = '';
+        document.getElementById('userFilter').value = '';
+        document.getElementById('clientFilter').value = '';
+        loadGroupedAnswers();
+    });
+    
+    function loadGroupedAnswers() {
+        // Show loading indicator
+        document.getElementById('loadingIndicator').classList.remove('d-none');
+        document.getElementById('groupedAnswersContainer').innerHTML = '';
+        
+        // Get filter values
+        const taskFilter = document.getElementById('taskFilter').value;
+        const userFilter = document.getElementById('userFilter').value;
+        const clientFilter = document.getElementById('clientFilter').value;
+        
+        // Build URL with filters
+        let url = '{% url "tasks:get_grouped_answers" %}';
+        const params = new URLSearchParams();
+        
+        if (taskFilter) params.append('task_id', taskFilter);
+        if (userFilter) params.append('user_id', userFilter);
+        if (clientFilter) params.append('client_id', clientFilter);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading indicator
+                document.getElementById('loadingIndicator').classList.add('d-none');
+                
+                if (data.results && data.results.length > 0) {
+                    document.getElementById('noResults').classList.add('d-none');
+                    
+                    // Render grouped cards
+                    renderGroupedCards(data.results);
+                } else {
+                    document.getElementById('noResults').classList.remove('d-none');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('loadingIndicator').classList.add('d-none');
+                document.getElementById('noResults').classList.remove('d-none');
+                document.getElementById('noResults').innerHTML = '{% trans "Ошибка при загрузке данных." %}';
+            });
+    }
+    
+    function renderGroupedCards(results) {
+        const container = document.getElementById('groupedAnswersContainer');
+        container.innerHTML = '';
+        
+        results.forEach(item => {
+            const card = createCard(item);
+            container.appendChild(card);
+        });
+    }
+    
+    function createCard(item) {
+        const card = document.createElement('div');
+        card.className = 'card answer-card';
+        card.dataset.id = item.id; // Store the unique ID for this group
+        
+        // Card header
+        const header = document.createElement('div');
+        header.className = 'card-header d-flex justify-content-between align-items-center';
+        header.innerHTML = `
+            <div>
+                <strong>${item.taskName}</strong> | 
+                <span class="text-muted">${item.clientName}</span> | 
+                <span class="text-info">${item.userName}</span> | 
+                <small class="text-muted">${formatDate(item.dateCreated)}</small>
+            </div>
+            <div>
+                ${item.isNew ? '<span class="new-badge">{% trans "Новая" %}</span>' : ''}
+                ${!item.isRead ? '<span class="read-badge">{% trans "Не прочитано" %}</span>' : ''}
+                ${!item.isRead ? `<button class="btn btn-sm btn-outline-primary mark-read-btn" data-ids="${item.answers.map(a => a.answerId).join(',')}">
+                    {% trans "Отметить как прочитано" %}
+                </button>` : ''}
+                <i class="fas fa-chevron-down ms-2"></i>
+            </div>
+        `;
+        
+        // Card body (initially hidden)
+        const body = document.createElement('div');
+        body.className = 'card-body collapse';
+        body.id = `collapse-${item.id}`.replace(/\s+/g, '-');
+        
+        // Create answers content
+        let answersHtml = '';
+        item.answers.forEach(answer => {
+            answersHtml += `
+                <div class="answer-detail">
+                    <strong>${answer.question}</strong>
+                    <p class="mb-1">${formatAnswer(answer)}</p>
+                    ${answer.photos && answer.photos.length > 0 ? 
+                        '<div class="mt-2">' + 
+                        answer.photos.map(photo => 
+                            `<img src="${photo.url}" class="photo-preview" onclick="showImage('${photo.url}')" title="Просмотр изображения" />`
+                        ).join(' ') + 
+                        '</div>' : ''}
+                </div>
+            `;
+        });
+        
+        body.innerHTML = answersHtml;
+        
+        // Add click event to toggle card body
+        header.addEventListener('click', function(e) {
+            // Don't toggle if the mark-read button was clicked
+            if (e.target.classList.contains('mark-read-btn') || e.target.closest('.mark-read-btn')) {
+                return;
+            }
+            
+            const collapseElement = document.getElementById(body.id);
+            const icon = this.querySelector('.fa-chevron-down') || this.querySelector('.fa-chevron-up');
+            
+            if (collapseElement.classList.contains('show')) {
+                collapseElement.classList.remove('show');
+                if (icon) {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            } else {
+                collapseElement.classList.add('show');
+                if (icon) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                }
+            }
+        });
+        
+        // Add event listener to the mark as read button
+        const markReadBtn = header.querySelector('.mark-read-btn');
+        if (markReadBtn) {
+            markReadBtn.addEventListener('click', function(e) {
+                e.stopPropagation(); // Prevent card from toggling
+                markAsRead(item.id, item.answers.map(a => a.answerId));
+            });
+        }
+        
+        card.appendChild(header);
+        card.appendChild(body);
+        
+        return card;
+    }
+    
+    function formatAnswer(answer) {
+        if (answer.questionType === 'PHOTO') {
+            return `{% trans "Фотоответ" %} (${answer.photos ? answer.photos.length : 0} {% trans "фото" %})`;
+        } else if (answer.selectedChoices && answer.selectedChoices.length > 0) {
+            return `{% trans "Выбрано:" %} ${answer.selectedChoices.join(', ')}`;
+        } else if (answer.textAnswer) {
+            return answer.textAnswer;
+        } else {
+            return '{% trans "Нет ответа" %}';
+        }
+    }
+    
+    function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleString();
+    }
+    
+    // Function to mark answers as read
+    window.markAsRead = function(groupId, answerIds) {
+        fetch('{% url "tasks:mark_answer_as_read" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                answer_ids: answerIds
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Reload the data to reflect the read status
+                loadGroupedAnswers();
+            } else {
+                console.error('Error marking as read:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    };
+    
+    // Function to show image in modal
+    window.showImage = function(imageUrl) {
+        document.getElementById('modalImage').src = imageUrl;
+        const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+        modal.show();
+    };
+    
+    // Helper function to get CSRF token
+    function getCSRFToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
+});
+</script>
+{% endblock %}

@@ -13,6 +13,8 @@ urlpatterns = [
     path('answer/<int:answer_id>/add-single-photo/', views.AddSinglePhotoView.as_view(), name='add_single_photo'),
     path('my-surveys/', views.MySurveysView.as_view(), name='my_surveys'),
     path('statistics/', views.StatisticsView.as_view(), name='statistics'),
+    path('grouped-answers/', views.GroupedAnswersView.as_view(), name='grouped_answers'),
     path('search_clients/', views.search_clients, name='search_clients'),
-
+    path('api/grouped-answers/', views.get_grouped_answers, name='get_grouped_answers'),
+    path('api/mark-read/', views.mark_answer_as_read, name='mark_answer_as_read'),
 ]

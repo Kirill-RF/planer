@@ -263,6 +263,8 @@ class SurveyAnswer(models.Model):
         verbose_name=_('Клиент')
     )
     created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
+    is_read = models.BooleanField(_('Прочитано'), default=False)
+    read_at = models.DateTimeField(_('Дата прочтения'), null=True, blank=True)
 
     def __str__(self):
         return f"Ответ от {self.user.username} на '{self.question.question_text[:30]}...'"

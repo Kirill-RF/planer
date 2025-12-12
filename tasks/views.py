@@ -27,6 +27,10 @@ from clients.models import Client
 from django.db.models import Count, Sum, Avg, Q
 from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
+from django.utils import timezone
+from datetime import timedelta
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
 
 class TaskListView(LoginRequiredMixin, ListView):
     """
@@ -312,82 +316,50 @@ class StatisticsView(LoginRequiredMixin, TemplateView):
     Главная страница статистики с фильтрами и визуализацией.
     """
     template_name = 'tasks/statistics.html'
+
+
+class GroupedAnswersView(LoginRequiredMixin, TemplateView):
+    """
+    View for displaying grouped survey answers.
+    """
+    template_name = 'tasks/grouped_answers.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        # Only moderators can access this view
+        if request.user.role != 'MODERATOR':
+            raise PermissionDenied(_("Доступ запрещен"))
+        return super().dispatch(request, *args, **kwargs)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = _('Статистика задач')
+        context['title'] = _('Ответы на вопросы')
+        context['all_tasks'] = Task.objects.filter(task_type=TaskType.SURVEY).distinct()
+        context['all_users'] = CustomUser.objects.filter(role='EMPLOYEE').distinct()
+        context['all_clients'] = Client.objects.all().distinct()
         
-        # Фильтры
-        filters = self.request.GET
-        
-        # Базовый QuerySet
-        tasks = Task.objects.all()
-        
-        # Применяем фильтры
-        if 'task_type' in filters and filters['task_type'] != 'all':
-            tasks = tasks.filter(task_type=filters['task_type'])
+        # Собираем статистику по анкетам
+        survey_statistics = []
+        for task in context['all_tasks']:
+            total_answers = SurveyAnswer.objects.filter(
+                question__task=task
+            ).count()
             
-        if 'client' in filters and filters['client'] != 'all':
-            tasks = tasks.filter(client_id=filters['client'])
+            unique_clients = SurveyAnswer.objects.filter(
+                question__task=task
+            ).values('client').distinct().count()
             
-        if 'employee' in filters and filters['employee'] != 'all':
-            tasks = tasks.filter(assigned_to_id=filters['employee'])
+            # Рассчитываем процент выполнения
+            target_count = task.target_count if task.target_count > 0 else 1
+            completion_rate = round((task.current_count / target_count) * 100, 1) if target_count > 0 else 0
             
-        if 'moderator' in filters and filters['moderator'] != 'all':
-            tasks = tasks.filter(created_by_id=filters['moderator'])
-            
-        if 'group_client' in filters and filters['group_client'] != 'all':
-            # Здесь можно добавить фильтрацию по группам клиентов
-            pass
-            
-        if 'date_from' in filters:
-            tasks = tasks.filter(created_at__gte=filters['date_from'])
-            
-        if 'date_to' in filters:
-            tasks = tasks.filter(created_at__lte=filters['date_to'])
-        
-        # Статистика по всем задачам
-        context['total_tasks'] = tasks.count()
-        context['completed_tasks'] = tasks.filter(status='COMPLETED').count()
-        context['on_check_tasks'] = tasks.filter(status='ON_CHECK').count()
-        context['sent_tasks'] = tasks.filter(status='SENT').count()
-        
-        # Статистика по типам задач
-        context['survey_tasks'] = tasks.filter(task_type='SURVEY').count()
-        context['photo_tasks'] = tasks.filter(task_type__in=['EQUIPMENT_PHOTO', 'SIMPLE_PHOTO']).count()
-        
-        # Статистика по сотрудникам
-        context['employees_stats'] = CustomUser.objects.filter(role='EMPLOYEE').annotate(
-            total_tasks=Count('tasks_assigned'),
-            completed_tasks=Count('tasks_assigned', filter=Q(tasks_assigned__status='COMPLETED')),
-            on_check_tasks=Count('tasks_assigned', filter=Q(tasks_assigned__status='ON_CHECK'))
-        ).order_by('-total_tasks')
-        
-        # Статистика по клиентам
-        context['clients_stats'] = Client.objects.annotate(
-            total_tasks=Count('tasks'),
-            completed_tasks=Count('tasks', filter=Q(tasks__status='COMPLETED')),
-            on_check_tasks=Count('tasks', filter=Q(tasks__status='ON_CHECK'))
-        ).order_by('-total_tasks')
-        
-        # Статистика по анкетам
-        survey_tasks = tasks.filter(task_type='SURVEY')
-        context['survey_statistics'] = []
-        
-        for task in survey_tasks:
-            total_answers = SurveyAnswer.objects.filter(question__task=task).count()
-            unique_clients = SurveyAnswer.objects.filter(question__task=task).values('client').distinct().count()
-            completion_rate = 0
-            
-            if task.target_count > 0:
-                completion_rate = min(100, int((task.current_count / task.target_count) * 100))
-            
-            context['survey_statistics'].append({
+            survey_statistics.append({
                 'task': task,
                 'total_answers': total_answers,
                 'unique_clients': unique_clients,
                 'completion_rate': completion_rate
             })
+        
+        context['survey_statistics'] = survey_statistics
         
         # График для первой анкеты
         if context['survey_statistics']:
@@ -395,7 +367,7 @@ class StatisticsView(LoginRequiredMixin, TemplateView):
             context['first_survey_chart_data'] = self.get_chart_data(first_survey['task'])
         
         return context
-    
+
     def get_chart_data(self, task):
         """Получает данные для графика по первой анкете."""
         data = {
@@ -516,3 +488,117 @@ def search_clients(request):
             return JsonResponse({'clients': client_list})
 
     return JsonResponse({'error': 'Метод не поддерживается'}, status=400)
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_grouped_answers(request):
+    """
+    API endpoint to get grouped survey answers.
+    Groups by user-task-client combinations.
+    """
+    # Check if user has permission (only moderators can access this)
+    if request.user.role != 'MODERATOR':
+        return JsonResponse({'error': 'Доступ запрещен'}, status=403)
+
+    # Get filters from query parameters
+    task_id = request.GET.get('task_id')
+    user_id = request.GET.get('user_id')
+    client_id = request.GET.get('client_id')
+    
+    # Calculate 24 hours ago for 'new' flag
+    time_threshold = timezone.now() - timedelta(hours=24)
+
+    # Build base query
+    answers = SurveyAnswer.objects.select_related(
+        'user', 'client', 'question__task'
+    ).prefetch_related(
+        'selected_choices', 'photos'
+    ).order_by('-created_at')
+
+    # Apply filters
+    if task_id:
+        answers = answers.filter(question__task_id=task_id)
+    if user_id:
+        answers = answers.filter(user_id=user_id)
+    if client_id:
+        answers = answers.filter(client_id=client_id)
+
+    # Group answers by user-task-client
+    grouped_data = {}
+    
+    for answer in answers:
+        key = f"{answer.user.id}-{answer.question.task.id}-{answer.client.id}"
+        
+        if key not in grouped_data:
+            grouped_data[key] = {
+                'id': key,
+                'taskName': answer.question.task.title,
+                'clientName': answer.client.name,
+                'userName': f"{answer.user.first_name} {answer.user.last_name}".strip() or answer.user.username,
+                'dateCreated': answer.created_at,
+                'answers': [],
+                'isNew': answer.created_at > time_threshold,
+                'isRead': answer.is_read,
+                'readAt': answer.read_at
+            }
+        
+        # Add answer details
+        answer_detail = {
+            'answerId': answer.id,
+            'question': answer.question.question_text,
+            'questionType': answer.question.question_type,
+            'textAnswer': answer.text_answer,
+            'selectedChoices': [choice.choice_text for choice in answer.selected_choices.all()],
+            'photos': [{'id': photo.id, 'url': photo.photo.url, 'created_at': photo.created_at} 
+                      for photo in answer.photos.all()],
+            'createdAt': answer.created_at
+        }
+        
+        grouped_data[key]['answers'].append(answer_detail)
+
+    # Convert to list and sort by date (newest first)
+    result = []
+    for item in grouped_data.values():
+        # Convert datetime objects to ISO format strings
+        item['dateCreated'] = item['dateCreated'].isoformat()
+        if item['readAt']:
+            item['readAt'] = item['readAt'].isoformat()
+        for answer in item['answers']:
+            answer['createdAt'] = answer['createdAt'].isoformat()
+            for photo in answer['photos']:
+                photo['created_at'] = photo['created_at'].isoformat()
+        result.append(item)
+    
+    result.sort(key=lambda x: x['dateCreated'], reverse=True)
+
+    return JsonResponse({'results': result})
+
+
+@login_required
+@require_http_methods(["POST"])
+def mark_answer_as_read(request):
+    """
+    API endpoint to mark an answer as read.
+    """
+    if request.user.role != 'MODERATOR':
+        return JsonResponse({'error': 'Доступ запрещен'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        answer_ids = data.get('answer_ids', [])
+        
+        # Update all answers in the group as read
+        SurveyAnswer.objects.filter(
+            id__in=answer_ids
+        ).update(
+            is_read=True,
+            read_at=timezone.now()
+        )
+        
+        return JsonResponse({'success': True})
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Неверный формат JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
