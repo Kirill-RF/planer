@@ -353,7 +353,7 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
     list_display = ('user', 'question', 'client', 'get_selected_choices', 'text_answer_preview', 'has_photos', 'created_at')
     readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at')
     list_per_page = 20
-    change_list_template = 'admin/tasks/surveyanswer_change_list.html'
+    change_list_template = 'admin/tasks/grouped_survey_answers.html'
     
     # Add filters
     list_filter = (
@@ -400,32 +400,8 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         return qs.select_related('user', 'question', 'client').prefetch_related('photos', 'selected_choices')
 
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('surveyanswer/', 
-                 self.admin_site.admin_view(self.survey_answer_list_view), 
-                 name='surveyanswer_list'),
-            path('export-excel/<int:task_id>/', 
-                 self.admin_site.admin_view(self.export_excel_view), 
-                 name='export_survey_answers_excel'),
-            path('api/grouped-answers/', 
-                 self.admin_site.admin_view(getGroupedAnswers), 
-                 name='grouped_answers_api'),
-            path('api/mark-as-read/', 
-                 self.admin_site.admin_view(markAsRead), 
-                 name='mark_as_read_api'),
-        ]
-        return custom_urls + urls
-
-    def survey_answer_list_view(self, request):
-        """Custom view for survey answers with filters and search functionality."""
-        from django.contrib.admin import site
-        from django.contrib.admin.views.main import ChangeList
-        from django.contrib.admin.options import IncorrectLookupParameters
-        from django.core.paginator import Paginator
-        
-        # Get distinct clients, users, moderators, tasks for filter dropdowns
+    def changelist_view(self, request, extra_context=None):
+        """Override the default changelist view to use our grouped view"""
         from clients.models import Client
         from users.models import CustomUser
         from .models import Task
@@ -444,8 +420,25 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
             'current_filters': request.GET,
             'opts': self.model._meta,
         }
+        context.update(extra_context or {})
         
         return render(request, 'admin/tasks/grouped_survey_answers.html', context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        # Remove the default changelist URL and replace with our custom functionality
+        custom_urls = [
+            path('export-excel/<int:task_id>/', 
+                 self.admin_site.admin_view(self.export_excel_view), 
+                 name='export_survey_answers_excel'),
+            path('api/grouped-answers/', 
+                 self.admin_site.admin_view(getGroupedAnswers), 
+                 name='grouped_answers_api'),
+            path('api/mark-as-read/', 
+                 self.admin_site.admin_view(markAsRead), 
+                 name='mark_as_read_api'),
+        ]
+        return custom_urls + urls
 
     def export_excel_view(self, request, task_id):
         """Export survey answers for a specific task to Excel."""
