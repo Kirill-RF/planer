@@ -221,6 +221,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Card header
         const header = document.createElement('div');
         header.className = 'card-header d-flex justify-content-between align-items-center';
+        header.setAttribute('data-bs-toggle', 'collapse');
+        header.setAttribute('data-bs-target', `#collapse-${item.id}`.replace(/\s+/g, '-'));
+        header.style.cursor = 'pointer';
         header.innerHTML = `
             <div>
                 <strong>${item.taskName}</strong> | 
@@ -242,6 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const body = document.createElement('div');
         body.className = 'card-body collapse';
         body.id = `collapse-${item.id}`.replace(/\s+/g, '-');
+        body.setAttribute('data-bs-parent', '#groupedAnswersContainer'); // Enable accordion behavior
         
         // Create answers content
         let answersHtml = '';
@@ -262,32 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         body.innerHTML = answersHtml;
         
-        // Add click event to toggle card body
-        header.addEventListener('click', function(e) {
-            // Don't toggle if the mark-read button was clicked
-            if (e.target.classList.contains('mark-read-btn') || e.target.closest('.mark-read-btn')) {
-                return;
-            }
-            
-            const collapseElement = document.getElementById(body.id);
-            const icon = this.querySelector('.fa-chevron-down') || this.querySelector('.fa-chevron-up');
-            
-            if (collapseElement.classList.contains('show')) {
-                collapseElement.classList.remove('show');
-                if (icon) {
-                    icon.classList.remove('fa-chevron-up');
-                    icon.classList.add('fa-chevron-down');
-                }
-            } else {
-                collapseElement.classList.add('show');
-                if (icon) {
-                    icon.classList.remove('fa-chevron-down');
-                    icon.classList.add('fa-chevron-up');
-                }
-            }
-        });
-        
-        // Add event listener to the mark as read button
+        // Add event listener to the mark as read button to prevent collapse toggle
         const markReadBtn = header.querySelector('.mark-read-btn');
         if (markReadBtn) {
             markReadBtn.addEventListener('click', function(e) {
@@ -295,6 +274,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 markAsRead(item.id, item.answers.map(a => a.answerId));
             });
         }
+        
+        // Add event listener for collapse toggle to update chevron icon
+        body.addEventListener('show.bs.collapse', function() {
+            const icon = header.querySelector('.fa-chevron-down');
+            if (icon) {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            }
+        });
+        
+        body.addEventListener('hide.bs.collapse', function() {
+            const icon = header.querySelector('.fa-chevron-up');
+            if (icon) {
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        });
         
         card.appendChild(header);
         card.appendChild(body);
