@@ -135,11 +135,6 @@
     .mark-read-btn {
         margin-left: 0.5rem;
     }
-    
-    /* Ensure collapse elements are hidden by default */
-    .card-body.collapse:not(.show) {
-        display: none;
-    }
 </style>
 
 <script>
