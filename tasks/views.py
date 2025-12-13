@@ -489,6 +489,155 @@ def survey_statistics_view(self, request, task_id):
     return render(request, 'admin/tasks/survey_statistics.html', context)
 
 @csrf_exempt
+def getGroupedAnswers(request):
+    """API endpoint to return grouped survey answers with filtering and new status."""
+    from django.utils import timezone
+    from django.db.models import Prefetch
+    from datetime import timedelta
+    
+    # Get filters from query parameters
+    task_id = request.GET.get('taskId')
+    user_id = request.GET.get('userId')
+    client_id = request.GET.get('clientId')
+    
+    # Calculate 24 hours ago for "new" flag
+    twenty_four_hours_ago = timezone.now() - timedelta(hours=24)
+    
+    # Build base queryset
+    answers = SurveyAnswer.objects.select_related(
+        'user', 'question__task', 'client'
+    ).prefetch_related(
+        'selected_choices', 
+        'photos',
+        'question__task__created_by'
+    ).order_by('-created_at')
+    
+    # Apply filters
+    if task_id:
+        answers = answers.filter(question__task_id=task_id)
+    if user_id:
+        answers = answers.filter(user_id=user_id)
+    if client_id:
+        answers = answers.filter(client_id=client_id)
+    
+    # Group answers by task, client, and user
+    grouped_data = {}
+    for answer in answers:
+        key = f"{answer.question.task.id}_{answer.client.id}_{answer.user.id}_{answer.created_at.date()}"
+        
+        if key not in grouped_data:
+            # Check if this group has been marked as read
+            from .models import SurveyAnswerGroupReadStatus
+            try:
+                read_status = SurveyAnswerGroupReadStatus.objects.get(
+                    task=answer.question.task,
+                    client=answer.client,
+                    user=answer.user,
+                    date_created=answer.created_at.date()
+                )
+                is_read = read_status.read_at is not None
+                read_at = read_status.read_at.strftime('%Y-%m-%d %H:%M:%S') if read_status.read_at else None
+            except SurveyAnswerGroupReadStatus.DoesNotExist:
+                is_read = False
+                read_at = None
+            
+            grouped_data[key] = {
+                'id': key,
+                'taskName': answer.question.task.title,
+                'clientName': answer.client.name,
+                'userName': answer.user.get_full_name() or answer.user.username,
+                'dateCreated': answer.created_at,
+                'moderatorName': answer.question.task.created_by.get_full_name() or answer.question.task.created_by.username if answer.question.task.created_by else '-',
+                'answers': [],
+                'isNew': answer.created_at > twenty_four_hours_ago and not is_read,
+                'isRead': is_read,
+                'readAt': read_at,
+            }
+        
+        # Add answer details
+        answer_details = {
+            'question': answer.question.question_text,
+            'questionType': answer.question.get_question_type_display(),
+            'selectedChoices': [choice.choice_text for choice in answer.selected_choices.all()],
+            'textAnswer': answer.text_answer,
+            'photos': [{'id': photo.id, 'url': photo.photo.url, 'name': photo.photo.name.split('/')[-1]} for photo in answer.photos.all()],
+            'createdAt': answer.created_at,
+            'questionId': answer.question.id
+        }
+        grouped_data[key]['answers'].append(answer_details)
+    
+    # Convert to list and sort by date created (newest first)
+    result = list(grouped_data.values())
+    result.sort(key=lambda x: x['dateCreated'], reverse=True)
+    
+    # Format dates to string for JSON serialization
+    for item in result:
+        item['dateCreated'] = item['dateCreated'].strftime('%Y-%m-%d %H:%M:%S')
+        for answer in item['answers']:
+            answer['createdAt'] = answer['createdAt'].strftime('%Y-%m-%d %H:%M:%S')
+    
+    return JsonResponse({'results': result})
+
+
+@csrf_exempt
+def markAsRead(request, answer_id=None):
+    """API endpoint to mark an answer group as read."""
+    from django.utils import timezone
+    from .models import SurveyAnswerGroupReadStatus
+    
+    if request.method == 'POST':
+        # Parse the answer_id which contains task_id_client_id_user_id_date
+        if answer_id is None:
+            # For the new API, we'll use POST data
+            try:
+                data = json.loads(request.body)
+                answer_id = data.get('answerId', '')
+            except:
+                return JsonResponse({'error': 'Invalid data'}, status=400)
+        
+        if answer_id:
+            try:
+                parts = answer_id.split('_')
+                if len(parts) >= 4:
+                    task_id = parts[0]
+                    client_id = parts[1] 
+                    user_id = parts[2]
+                    date_str = parts[3]  # This might be date part from a longer string
+                    
+                    # Create or update the read status
+                    read_status, created = SurveyAnswerGroupReadStatus.objects.get_or_create(
+                        task_id=task_id,
+                        client_id=client_id,
+                        user_id=user_id,
+                        date_created=date_str,
+                        defaults={
+                            'read_at': timezone.now(),
+                            'read_by': request.user if request.user.is_authenticated else None
+                        }
+                    )
+                    
+                    if not created:
+                        # Update the existing record
+                        read_status.read_at = timezone.now()
+                        read_status.read_by = request.user if request.user.is_authenticated else None
+                        read_status.save()
+                    
+                    return JsonResponse({
+                        'success': True, 
+                        'readAt': read_status.read_at.strftime('%Y-%m-%d %H:%M:%S'),
+                        'message': 'Статус прочтения обновлен'
+                    })
+                else:
+                    return JsonResponse({'error': 'Invalid answer ID format'}, status=400)
+            except Exception as e:
+                return JsonResponse({'error': str(e)}, status=500)
+        else:
+            return JsonResponse({'error': 'Answer ID is required'}, status=400)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
 def search_clients(request):
     if request.method == 'POST':
         data = json.loads(request.body)
@@ -503,7 +652,7 @@ def search_clients(request):
         ).order_by('name')[:20]
 
         if len(clients) == 0:
-            return JsonResponse({'message': 'Клиенты не найдены'})
+            return JsonResponse({'message': 'Клиенти не найдены'})
 
         client_list = [{'id': client.id, 'name': client.name} for client in clients]
 
