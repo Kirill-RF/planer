@@ -79,6 +79,42 @@
         border-radius: 4px;
     }
     
+    /* Autocomplete styles */
+    .autocomplete-container {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+    
+    .autocomplete-results {
+        position: absolute;
+        z-index: 1000;
+        background: white;
+        border: 1px solid #ccc;
+        border-top: none;
+        max-height: 200px;
+        overflow-y: auto;
+        width: 100%;
+        display: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 0 0 4px 4px;
+    }
+    
+    .autocomplete-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s;
+    }
+    
+    .autocomplete-item:hover, .autocomplete-item.active {
+        background-color: #f0f8ff;
+    }
+    
+    .autocomplete-item:last-child {
+        border-bottom: none;
+    }
+
     .text-answer-expanded {
         white-space: pre-wrap;
         max-height: 200px;
@@ -161,8 +197,6 @@
 </style>
 
 <div class="module">
-    <h1>{{ title }}</h1>
-    
     <!-- Filter Section -->
     <div class="filter-container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -186,7 +220,10 @@
                 
                 <div class="filter-item" style="min-width: 180px; max-width: 220px;">
                     <label for="task-search">Задача:</label>
-                    <input type="text" id="task-search" name="task_search" placeholder="Поиск..." value="{{ current_filters.task_search|default:'' }}">
+                    <div class="autocomplete-container">
+                        <input type="text" id="task-search" name="task_search" placeholder="Поиск..." value="{{ current_filters.task_search|default:'' }}">
+                        <div id="task-autocomplete-results" class="autocomplete-results"></div>
+                    </div>
                     <select name="task" id="task-select">
                         <option value="">Все задачи</option>
                         {% for task in tasks %}
@@ -408,23 +445,125 @@ if (clientSearchInput) {
     });
 }
 
-// Task search with autocomplete - case insensitive
+// Function to highlight matching text
+function highlightText(text, highlight) {
+    if (!highlight) return text;
+    const regex = new RegExp(`(${escapeRegExp(highlight)})`, 'gi');
+    return text.replace(regex, '<strong>$1</strong>');
+}
+
+// Function to escape special characters for regex
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+}
+
+// Task search with autocomplete
 const taskSearchInput = document.getElementById('task-search');
 if (taskSearchInput) {
+    let currentTaskFocus = -1;
+    let taskAutocompleteItems = [];
+
     taskSearchInput.addEventListener('input', function() {
-        const searchTerm = this.value.toLowerCase();
-        const select = document.getElementById('task-select');
-        
-        // Show/hide options based on search term (case insensitive)
-        for (let i = 0; i < select.options.length; i++) {
-            const option = select.options[i];
-            if (option.text.toLowerCase().includes(searchTerm) || searchTerm === '') {
-                option.style.display = '';
-            } else {
-                option.style.display = 'none';
+        const searchTerm = this.value.trim();
+        const autocompleteList = document.getElementById('task-autocomplete-results');
+
+        // Clear previous items
+        autocompleteList.innerHTML = '';
+        currentTaskFocus = -1;
+
+        if (searchTerm.length < 1) {
+            autocompleteList.style.display = 'none';
+            return;
+        }
+
+        // Fetch autocomplete suggestions
+        fetch(`${window.location.origin}/admin/tasks/surveyanswer/autocomplete_tasks/?q=${encodeURIComponent(searchTerm)}`)
+            .then(response => response.json())
+            .then(data => {
+                taskAutocompleteItems = data.tasks || [];
+
+                if (taskAutocompleteItems.length === 0) {
+                    autocompleteList.style.display = 'none';
+                    return;
+                }
+
+                autocompleteList.style.display = 'block';
+
+                taskAutocompleteItems.forEach((task, index) => {
+                    const item = document.createElement('div');
+                    item.classList.add('autocomplete-item');
+                    item.innerHTML = highlightText(task.title, searchTerm);
+                    item.dataset.taskId = task.id;
+                    item.dataset.taskTitle = task.title;
+
+                    item.addEventListener('click', function() {
+                        taskSearchInput.value = this.dataset.taskTitle;
+                        autocompleteList.innerHTML = '';
+                        autocompleteList.style.display = 'none';
+                        currentTaskFocus = -1;
+
+                        // Update the hidden select element with the exact task ID
+                        const select = document.getElementById('task-select');
+                        select.value = this.dataset.taskId;
+                        
+                        // Submit the form to apply the filter
+                        document.getElementById('filter-form').submit();
+                    });
+
+                    autocompleteList.appendChild(item);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching task autocomplete suggestions:', error);
+            });
+    });
+
+    // Handle keyboard navigation
+    taskSearchInput.addEventListener('keydown', function(e) {
+        const autocompleteList = document.getElementById('task-autocomplete-results');
+        const items = autocompleteList.querySelectorAll('.autocomplete-item');
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            currentTaskFocus = (currentTaskFocus + 1) % items.length;
+            updateTaskActiveItem(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            currentTaskFocus = (currentTaskFocus - 1 + items.length) % items.length;
+            updateTaskActiveItem(items);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (currentTaskFocus >= 0 && items[currentTaskFocus]) {
+                items[currentTaskFocus].click();
+            } else if (taskSearchInput.value.trim() === '') {
+                // If search is empty and Enter is pressed, submit the form
+                document.getElementById('filter-form').submit();
             }
+        } else if (e.key === 'Escape') {
+            autocompleteList.style.display = 'none';
+            currentTaskFocus = -1;
         }
     });
+
+    // Hide autocomplete when clicking outside
+    document.addEventListener('click', function(e) {
+        if (e.target !== taskSearchInput && !e.target.closest('.autocomplete-container')) {
+            const autocompleteList = document.getElementById('task-autocomplete-results');
+            autocompleteList.style.display = 'none';
+            currentTaskFocus = -1;
+        }
+    });
+
+    // Function to update active task item
+    function updateTaskActiveItem(items) {
+        items.forEach((item, index) => {
+            if (index === currentTaskFocus) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
 }
 
 function toggleText(element) {
