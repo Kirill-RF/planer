@@ -14,5 +14,6 @@ urlpatterns = [
     path('my-surveys/', views.MySurveysView.as_view(), name='my_surveys'),
     path('statistics/', views.StatisticsView.as_view(), name='statistics'),
     path('search_clients/', views.search_clients, name='search_clients'),
+    path('autocomplete_clients/', views.autocomplete_clients, name='autocomplete_clients'),
 
 ]

@@ -105,7 +105,7 @@
                                                                     <div class="col-md-3 mb-3" style="display: inline-block; margin-right: 15px;">
                                                                         <div style="position: relative; display: inline-block;">
                                                                             <img src="{{ photo_data.photo.photo.url }}" alt="Фото" style="max-width: 150px; max-height: 150px; object-fit: cover; cursor: pointer;" 
-                                                                                 data-bs-toggle="modal" data-bs-target="#photoModal{{ forloop.parentloop.counter }}_{{ forloop.counter }}">
+                                                                                 data-bs-toggle="modal" data-bs-target="#photoModal{{ photo_data.photo.id }}">
                                                                             <div style="position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px;">
                                                                                 {{ forloop.counter }}
                                                                             </div>
@@ -126,11 +126,11 @@
                                     <!-- Модальные окна для фото -->
                                     {% for group in question_stat.photo_groups %}
                                         {% for photo_data in group.photos_data %}
-                                            <div class="modal fade" id="photoModal{{ forloop.parentloop.counter }}_{{ forloop.counter }}" tabindex="-1" aria-labelledby="photoModalLabel{{ forloop.parentloop.counter }}_{{ forloop.counter }}" aria-hidden="true">
+                                            <div class="modal fade" id="photoModal{{ photo_data.photo.id }}" tabindex="-1" aria-labelledby="photoModalLabel{{ photo_data.photo.id }}" aria-hidden="true">
                                                 <div class="modal-dialog modal-xl">
                                                     <div class="modal-content">
                                                         <div class="modal-header">
-                                                            <h5 class="modal-title" id="photoModalLabel{{ forloop.parentloop.counter }}_{{ forloop.counter }}">Фото</h5>
+                                                            <h5 class="modal-title" id="photoModalLabel{{ photo_data.photo.id }}">Фото</h5>
                                                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
                                                         </div>
                                                         <div class="modal-body text-center">

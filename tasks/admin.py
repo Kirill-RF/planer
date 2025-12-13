@@ -13,11 +13,14 @@ from nested_admin import NestedModelAdmin, NestedStackedInline, NestedTabularInl
 from .models import (
     Task, TaskStatus, TaskType, SurveyQuestion, 
     SurveyQuestionChoice, SurveyAnswer, PhotoReport, PhotoReportItem,
-    SurveyAnswerPhoto
+    SurveyAnswerPhoto, SurveyAnswerGroupReadStatus
 )
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+# Import the new API functions
+from .views import getGroupedAnswers, markAsRead, autocomplete_clients, autocomplete_tasks
 
 class SurveyQuestionChoiceInline(NestedTabularInline):
     """Inline choices for survey questions."""
@@ -350,7 +353,7 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
     list_display = ('user', 'question', 'client', 'get_selected_choices', 'text_answer_preview', 'has_photos', 'created_at')
     readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at')
     list_per_page = 20
-    change_list_template = 'admin/tasks/surveyanswer_change_list.html'
+    change_list_template = 'admin/tasks/grouped_survey_answers.html'
     
     # Add filters
     list_filter = (
@@ -397,81 +400,8 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         return qs.select_related('user', 'question', 'client').prefetch_related('photos', 'selected_choices')
 
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('surveyanswer/', 
-                 self.admin_site.admin_view(self.survey_answer_list_view), 
-                 name='surveyanswer_list'),
-            path('export-excel/<int:task_id>/', 
-                 self.admin_site.admin_view(self.export_excel_view), 
-                 name='export_survey_answers_excel'),
-        ]
-        return custom_urls + urls
-
-    def survey_answer_list_view(self, request):
-        """Custom view for survey answers with filters and search functionality."""
-        from django.contrib.admin import site
-        from django.contrib.admin.views.main import ChangeList
-        from django.contrib.admin.options import IncorrectLookupParameters
-        from django.core.paginator import Paginator
-        
-        # Get all survey answers with related data
-        queryset = self.get_queryset(request)
-        
-        # Apply filters
-        if request.GET.get('client'):
-            queryset = queryset.filter(client__id=request.GET.get('client'))
-        
-        if request.GET.get('user'):
-            queryset = queryset.filter(user__id=request.GET.get('user'))
-        
-        if request.GET.get('moderator'):
-            queryset = queryset.filter(question__task__created_by__id=request.GET.get('moderator'))
-        
-        if request.GET.get('task_type'):
-            queryset = queryset.filter(question__task__task_type=request.GET.get('task_type'))
-        
-        if request.GET.get('task'):
-            queryset = queryset.filter(question__task__id=request.GET.get('task'))
-        
-        # Date filters
-        if request.GET.get('date_filter'):
-            date_filter = request.GET.get('date_filter')
-            if date_filter == 'today':
-                queryset = queryset.filter(created_at__date=timezone.now().date())
-            elif date_filter == 'yesterday':
-                yesterday = timezone.now().date() - timedelta(days=1)
-                queryset = queryset.filter(created_at__date=yesterday)
-            elif date_filter == 'week':
-                week_ago = timezone.now().date() - timedelta(days=7)
-                queryset = queryset.filter(created_at__date__gte=week_ago)
-        
-        # Date range filter
-        if request.GET.get('date_from') and request.GET.get('date_to'):
-            from_date = request.GET.get('date_from')
-            to_date = request.GET.get('date_to')
-            queryset = queryset.filter(created_at__date__gte=from_date, created_at__date__lte=to_date)
-        
-        # Client name search
-        if request.GET.get('client_search'):
-            client_search = request.GET.get('client_search')
-            queryset = queryset.filter(client__name__icontains=client_search)
-        
-        # Task name search
-        if request.GET.get('task_search'):
-            task_search = request.GET.get('task_search')
-            queryset = queryset.filter(question__task__title__icontains=task_search)
-        
-        # Order by latest first
-        queryset = queryset.order_by('-created_at')
-        
-        # Pagination
-        paginator = Paginator(queryset, 20)
-        page_number = request.GET.get('page', 1)
-        page_obj = paginator.get_page(page_number)
-        
-        # Get distinct clients, users, moderators, tasks for filter dropdowns
+    def changelist_view(self, request, extra_context=None):
+        """Override the default changelist view to use our grouped view"""
         from clients.models import Client
         from users.models import CustomUser
         from .models import Task
@@ -479,11 +409,9 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         clients = Client.objects.all()
         users = CustomUser.objects.filter(role='EMPLOYEE')
         moderators = CustomUser.objects.filter(role='MODERATOR')
-        tasks = Task.objects.filter(task_type='SURVEY')
+        tasks = Task.objects.all()
         
         context = {
-            'title': _('Ответы на задачи'),
-            'page_obj': page_obj,
             'clients': clients,
             'users': users,
             'moderators': moderators,
@@ -491,8 +419,31 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
             'current_filters': request.GET,
             'opts': self.model._meta,
         }
+        context.update(extra_context or {})
         
-        return render(request, 'admin/tasks/surveyanswer_list.html', context)
+        return render(request, 'admin/tasks/grouped_survey_answers.html', context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        # Remove the default changelist URL and replace with our custom functionality
+        custom_urls = [
+            path('export-excel/<int:task_id>/', 
+                 self.admin_site.admin_view(self.export_excel_view), 
+                 name='export_survey_answers_excel'),
+            path('api/grouped-answers/', 
+                 self.admin_site.admin_view(getGroupedAnswers), 
+                 name='grouped_answers_api'),
+            path('api/mark-as-read/', 
+                 self.admin_site.admin_view(markAsRead), 
+                 name='mark_as_read_api'),
+            path('autocomplete_clients/', 
+                 self.admin_site.admin_view(autocomplete_clients), 
+                 name='autocomplete_clients'),
+            path('autocomplete_tasks/', 
+                 self.admin_site.admin_view(autocomplete_tasks), 
+                 name='autocomplete_tasks'),
+        ]
+        return custom_urls + urls
 
     def export_excel_view(self, request, task_id):
         """Export survey answers for a specific task to Excel."""
@@ -577,6 +528,15 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
         
         workbook.save(response)
         return response
+
+@admin.register(SurveyAnswerGroupReadStatus)
+class SurveyAnswerGroupReadStatusAdmin(admin.ModelAdmin):
+    list_display = ('task', 'client', 'user', 'date_created', 'read_at', 'read_by')
+    list_filter = ('date_created', 'read_at', 'task', 'client', 'user')
+    search_fields = ('task__title', 'client__name', 'user__username')
+    readonly_fields = ('created_at',)
+    list_per_page = 20
+
 
 @admin.register(SurveyAnswer)
 class SurveyAnswerAdminWrapper(SurveyAnswerAdmin):
