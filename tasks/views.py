@@ -5,7 +5,7 @@ Task management views.
 This module provides views for displaying and managing tasks.
 Follows SOLID principles by separating concerns and providing clear interfaces.
 """
-
+import re
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import user_passes_test
@@ -494,11 +494,14 @@ def getGroupedAnswers(request):
     from django.utils import timezone
     from django.db.models import Prefetch
     from datetime import timedelta
+    from clients.models import Client
     
     # Get filters from query parameters
     task_id = request.GET.get('taskId')
     user_id = request.GET.get('userId')
     client_id = request.GET.get('clientId')
+    # Also accept client search parameter for text-based search
+    client_search = request.GET.get('client_search', '').strip()
     
     # Calculate 24 hours ago for "new" flag
     twenty_four_hours_ago = timezone.now() - timedelta(hours=24)
@@ -665,3 +668,40 @@ def search_clients(request):
             return JsonResponse({'clients': client_list})
 
     return JsonResponse({'error': 'Метод не поддерживается'}, status=400)
+
+
+def autocomplete_clients(request):
+    """API endpoint for client autocomplete functionality with case-insensitive search."""
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 1:
+        return JsonResponse({'clients': []})
+    
+    # Case-insensitive search using __icontains
+    escaped_query = re.escape(query)
+    clients = Client.objects.filter(
+            name__iregex=escaped_query
+        ).distinct()[:20]
+    # clients = Client.objects.filter(
+    #     name__icontains=query
+    # ).order_by('name')[:10]  # Limit to 10 results as requested
+    
+    client_list = [{'id': client.id, 'name': client.name} for client in clients]
+    
+    return JsonResponse({'clients': client_list})
+def autocomplete_tasks(request):
+    """API endpoint for task autocomplete functionality with case-insensitive search."""
+    query = request.GET.get('q', '').strip()
+
+    if len(query) < 1:
+        return JsonResponse({'tasks': []})
+
+    # Case-insensitive search using __icontains
+    escaped_query = re.escape(query)
+    tasks = Task.objects.filter(
+            title__iregex=escaped_query
+        ).distinct()[:20]
+
+    task_list = [{'id': task.id, 'title': task.title} for task in tasks]
+
+    return JsonResponse({'tasks': task_list})
