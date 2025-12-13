@@ -13,14 +13,260 @@ from nested_admin import NestedModelAdmin, NestedStackedInline, NestedTabularInl
 from .models import (
     Task, TaskStatus, TaskType, SurveyQuestion, 
     SurveyQuestionChoice, SurveyAnswer, PhotoReport, PhotoReportItem,
-    SurveyAnswerPhoto, SurveyAnswerGroupReadStatus
+    SurveyAnswerPhoto, SurveyAnswerGroupReadStatus, Announcement, AnnouncementReadStatus
 )
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # Import the new API functions
-from .views import getGroupedAnswers, markAsRead, autocomplete_clients, autocomplete_tasks
+from .views import getGroupedAnswers, markAsRead, autocomplete_clients, autocomplete_tasks, send_announcement, mark_announcement_read, get_user_announcements
+
+
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ('title', 'created_by', 'target_group', 'requires_confirmation', 'created_at')
+    list_filter = ('target_group', 'requires_confirmation', 'created_at', 'created_by')
+    search_fields = ('title', 'content', 'created_by__username', 'created_by__first_name', 'created_by__last_name')
+    filter_horizontal = ('recipients',)
+    readonly_fields = ('created_at', 'updated_at')
+    list_per_page = 20
+    
+    fieldsets = (
+        (_('Основная информация'), {
+            'fields': ('title', 'content', 'created_by')
+        }),
+        (_('Настройки доставки'), {
+            'fields': ('target_group', 'recipients', 'requires_confirmation')
+        }),
+        (_('Дополнительно'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    formfield_overrides = {
+        models.TextField: {'widget': Textarea(attrs={'rows': 8, 'cols': 80})},
+    }
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('created_by')
+    
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "recipients":
+            kwargs["queryset"] = CustomUser.objects.all().order_by('username')
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
+class AnnouncementReadStatusAdmin(admin.ModelAdmin):
+    list_display = ('announcement', 'user', 'is_read', 'read_at')
+    list_filter = ('is_read', 'read_at', 'announcement', 'user')
+    search_fields = ('announcement__title', 'user__username', 'user__first_name', 'user__last_name')
+    readonly_fields = ('announcement', 'user', 'read_at')
+    list_per_page = 20
+    
+    def has_add_permission(self, request):
+        return False
+
+
+class SurveyAnswerAdmin(admin.ModelAdmin):
+    list_display = ('user', 'question', 'client', 'get_selected_choices', 'text_answer_preview', 'has_photos', 'created_at')
+    readonly_fields = ('user', 'question', 'selected_choices', 'text_answer', 'client', 'created_at')
+    list_per_page = 20
+    change_list_template = 'admin/tasks/grouped_survey_answers.html'
+    
+    # Add filters
+    list_filter = (
+        'created_at',
+        'user',
+        'question__task',
+        'question',
+        'client',
+    )
+
+    # Search fields for autocomplete functionality
+    search_fields = (
+        'client__name__icontains',  # For client search
+        'user__username__icontains',  # For user search
+        'user__first_name__icontains',  # For user first name
+        'user__last_name__icontains',  # For user last name
+        'question__task__title__icontains',  # For task search
+        'question__question_text__icontains',  # For question search
+    )
+
+    def has_add_permission(self, request):
+        return False
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_selected_choices(self, obj):
+        if obj.selected_choices.exists():
+            return ', '.join([choice.choice_text for choice in obj.selected_choices.all()])
+        return '-'
+    get_selected_choices.short_description = _('Выбранные варианты')
+
+    def text_answer_preview(self, obj):
+        if obj.text_answer:
+            return obj.text_answer[:50] + '...' if len(obj.text_answer) > 50 else obj.text_answer
+        return '-'
+    text_answer_preview.short_description = _('Текстовый ответ')
+
+    def has_photos(self, obj):
+        return obj.photos.exists()
+    has_photos.short_description = _('Есть фото')
+    has_photos.boolean = True
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('user', 'question', 'client').prefetch_related('photos', 'selected_choices')
+
+    def changelist_view(self, request, extra_context=None):
+        """Override the default changelist view to use our grouped view"""
+        from clients.models import Client
+        from users.models import CustomUser
+        from .models import Task
+
+        clients = Client.objects.all()
+        users = CustomUser.objects.filter(role='EMPLOYEE')
+        moderators = CustomUser.objects.filter(role='MODERATOR')
+        tasks = Task.objects.all()
+
+        context = {
+            'clients': clients,
+            'users': users,
+            'moderators': moderators,
+            'tasks': tasks,
+            'current_filters': request.GET,
+            'opts': self.model._meta,
+        }
+        context.update(extra_context or {})
+
+        return render(request, 'admin/tasks/grouped_survey_answers.html', context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        # Remove the default changelist URL and replace with our custom functionality
+        custom_urls = [
+            path('export-excel/<int:task_id>/',
+                 self.admin_site.admin_view(self.export_excel_view),
+                 name='export_survey_answers_excel'),
+            path('api/grouped-answers/',
+                 self.admin_site.admin_view(getGroupedAnswers),
+                 name='grouped_answers_api'),
+            path('api/mark-as-read/',
+                 self.admin_site.admin_view(markAsRead),
+                 name='mark_as_read_api'),
+            path('autocomplete_clients/',
+                 self.admin_site.admin_view(autocomplete_clients),
+                 name='autocomplete_clients'),
+            path('autocomplete_tasks/',
+                 self.admin_site.admin_view(autocomplete_tasks),
+                 name='autocomplete_tasks'),
+            path('send-announcement/',
+                 self.admin_site.admin_view(send_announcement),
+                 name='send_announcement'),
+            path('mark-announcement-read/',
+                 self.admin_site.admin_view(mark_announcement_read),
+                 name='mark_announcement_read'),
+            path('get-user-announcements/',
+                 self.admin_site.admin_view(get_user_announcements),
+                 name='get_user_announcements'),
+        ]
+        return custom_urls + urls
+
+    def export_excel_view(self, request, task_id):
+        """Export survey answers for a specific task to Excel."""
+        from .models import Task
+
+        try:
+            task = Task.objects.get(id=task_id)
+        except Task.DoesNotExist:
+            return HttpResponse("Task not found", status=404)
+
+        # Get all answers for this task
+        answers = SurveyAnswer.objects.filter(
+            question__task=task
+        ).select_related(
+            'user', 'question', 'client'
+        ).prefetch_related(
+            'photos', 'selected_choices'
+        ).order_by('client__name', 'question__order', 'created_at')
+
+        # Create Excel workbook
+        workbook = openpyxl.Workbook()
+        worksheet = workbook.active
+        worksheet.title = f"Ответы {task.title[:30]}"  # Limit sheet name length
+
+        # Define headers
+        headers = [
+            'Клиент', 'Сотрудник', 'Дата ответа', 'Вопрос', 'Тип вопроса',
+            'Выбранные варианты', 'Текстовый ответ', 'Количество фото'
+        ]
+
+        # Write headers
+        for col_num, header in enumerate(headers, 1):
+            cell = worksheet.cell(row=1, column=col_num, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='D3D3D3', end_color='D3D3D3', fill_type='solid')
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+
+        # Write data
+        row_num = 2
+        for answer in answers:
+            # Get selected choices as text
+            selected_choices_text = ', '.join([choice.choice_text for choice in answer.selected_choices.all()])
+
+            # Count photos
+            photo_count = answer.photos.count()
+
+            row_data = [
+                answer.client.name,
+                answer.user.get_full_name() or answer.user.username,
+                answer.created_at.strftime('%d.%m.%Y %H:%M:%S'),
+                answer.question.question_text,
+                answer.question.get_question_type_display(),
+                selected_choices_text,
+                answer.text_answer,
+                photo_count
+            ]
+
+            for col_num, value in enumerate(row_data, 1):
+                cell = worksheet.cell(row=row_num, column=col_num, value=str(value) if value is not None else '')
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+
+            row_num += 1
+
+        # Auto-adjust column widths
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+
+            adjusted_width = min(max_length + 2, 50)  # Limit width to 50
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+
+        # Prepare response
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="survey_answers_{task.title.replace(" ", "_")}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+
+        workbook.save(response)
+        return response
+
+
+@admin.register(Announcement)
+class AnnouncementAdminWrapper(AnnouncementAdmin):
+    pass
+
+
+@admin.register(AnnouncementReadStatus)
+class AnnouncementReadStatusAdminWrapper(AnnouncementReadStatusAdmin):
+    pass
 
 class SurveyQuestionChoiceInline(NestedTabularInline):
     """Inline choices for survey questions."""
@@ -573,3 +819,50 @@ class PhotoReportItemAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="width: 50px; height: 50px; object-fit: cover;" />', obj.photo.url)
         return '-'
     photo_thumbnail.short_description = _('Миниатюра')
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ('title', 'created_by', 'target_group', 'requires_confirmation', 'created_at')
+    list_filter = ('target_group', 'requires_confirmation', 'created_at', 'created_by')
+    search_fields = ('title', 'content', 'created_by__username', 'created_by__first_name', 'created_by__last_name')
+    filter_horizontal = ('recipients',)
+    readonly_fields = ('created_at', 'updated_at')
+    list_per_page = 20
+    
+    fieldsets = (
+        (_('Основная информация'), {
+            'fields': ('title', 'content', 'created_by')
+        }),
+        (_('Настройки доставки'), {
+            'fields': ('target_group', 'recipients', 'requires_confirmation')
+        }),
+        (_('Дополнительно'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    formfield_overrides = {
+        models.TextField: {'widget': Textarea(attrs={'rows': 8, 'cols': 80})},
+    }
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('created_by')
+    
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "recipients":
+            kwargs["queryset"] = CustomUser.objects.all().order_by('username')
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
+@admin.register(AnnouncementReadStatus)
+class AnnouncementReadStatusAdmin(admin.ModelAdmin):
+    list_display = ('announcement', 'user', 'is_read', 'read_at')
+    list_filter = ('is_read', 'read_at', 'announcement', 'user')
+    search_fields = ('announcement__title', 'user__username', 'user__first_name', 'user__last_name')
+    readonly_fields = ('announcement', 'user', 'read_at')
+    list_per_page = 20
+    
+    def has_add_permission(self, request):
+        return False
