@@ -503,7 +503,16 @@ function loadGroupedAnswers() {
     
     for (let [key, value] of formData.entries()) {
         if (value) {
-            filters.append(key, value);
+            // Map form field names to API parameter names
+            if (key === 'client') {
+                filters.append('clientId', value);
+            } else if (key === 'task') {
+                filters.append('taskId', value);
+            } else if (key === 'user') {
+                filters.append('userId', value);
+            } else {
+                filters.append(key, value);
+            }
         }
     }
     
@@ -784,11 +793,14 @@ if (clientSearchInput) {
         
         if (searchTerm.length < 1) {
             autocompleteList.style.display = 'none';
+            // If search is cleared, clear the hidden select as well
+            const select = document.getElementById('client-select');
+            select.value = '';
             return;
         }
         
-        // Fetch autocomplete suggestions
-        fetch(`${window.location.pathname}autocomplete_clients/?q=${encodeURIComponent(searchTerm)}`)
+        // Fetch autocomplete suggestions - use the correct URL pattern
+        fetch(`${window.location.origin}/admin/tasks/surveyanswer/autocomplete_clients/?q=${encodeURIComponent(searchTerm)}`)
             .then(response => response.json())
             .then(data => {
                 autocompleteItems = data.clients || [];
@@ -813,14 +825,9 @@ if (clientSearchInput) {
                         autocompleteList.style.display = 'none';
                         currentFocus = -1;
                         
-                        // Update the hidden select element
+                        // Update the hidden select element with the exact client ID
                         const select = document.getElementById('client-select');
-                        for (let option of select.options) {
-                            if (parseInt(option.value) === parseInt(this.dataset.clientId)) {
-                                option.selected = true;
-                                break;
-                            }
-                        }
+                        select.value = this.dataset.clientId;
                         
                         // Apply the filter
                         loadGroupedAnswers();

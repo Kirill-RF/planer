@@ -494,11 +494,14 @@ def getGroupedAnswers(request):
     from django.utils import timezone
     from django.db.models import Prefetch
     from datetime import timedelta
+    from clients.models import Client
     
     # Get filters from query parameters
     task_id = request.GET.get('taskId')
     user_id = request.GET.get('userId')
     client_id = request.GET.get('clientId')
+    # Also accept client search parameter for text-based search
+    client_search = request.GET.get('client_search', '').strip()
     
     # Calculate 24 hours ago for "new" flag
     twenty_four_hours_ago = timezone.now() - timedelta(hours=24)
