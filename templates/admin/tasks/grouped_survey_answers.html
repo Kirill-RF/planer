@@ -12,6 +12,7 @@
 {% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <style>
     .filter-container {
         background: #f8f8f8;
@@ -652,7 +653,29 @@ function exportToExcel() {
 }
 
 function getCSRFToken() {
-    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    // Try multiple methods to get CSRF token
+    const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (tokenInput) {
+        return tokenInput.value;
+    }
+    
+    // Try to get from meta tag
+    const csrfTokenMeta = document.querySelector('meta[name=csrf-token]');
+    if (csrfTokenMeta) {
+        return csrfTokenMeta.getAttribute('content');
+    }
+    
+    // Fallback: try to get from cookie
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrftoken') {
+            return value;
+        }
+    }
+    
+    // If nothing works, return empty string
+    return '';
 }
 
 function updatePagination(totalPages) {
