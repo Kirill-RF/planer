@@ -21,7 +21,7 @@ from django.utils.translation import gettext as _
 from .forms import SurveyResponseForm, AddPhotosForm, AddSinglePhotoForm
 from .models import Task, TaskStatus, TaskType
 from users.models import CustomUser
-from .models import SurveyAnswer, SurveyQuestion, SurveyAnswerPhoto
+from .models import SurveyAnswer, SurveyQuestion, SurveyAnswerPhoto, Announcement, AnnouncementReadStatus
 from clients.models import Client
 
 from django.db.models import Count, Sum, Avg, Q
@@ -705,3 +705,136 @@ def autocomplete_tasks(request):
     task_list = [{'id': task.id, 'title': task.title} for task in tasks]
 
     return JsonResponse({'tasks': task_list})
+
+
+def send_announcement(request):
+    """API endpoint to send announcement to users."""
+    if request.method == 'POST' and request.user.is_authenticated and request.user.role == 'MODERATOR':
+        try:
+            data = json.loads(request.body)
+            title = data.get('title', '')
+            content = data.get('content', '')
+            target_group = data.get('target_group', 'SELECTED')
+            recipient_ids = data.get('recipients', [])
+            requires_confirmation = data.get('requires_confirmation', False)
+
+            if not title or not content:
+                return JsonResponse({'error': 'Заголовок и содержание обязательны'}, status=400)
+
+            # Create announcement
+            announcement = Announcement.objects.create(
+                title=title,
+                content=content,
+                created_by=request.user,
+                target_group=target_group,
+                requires_confirmation=requires_confirmation
+            )
+
+            # Add recipients based on target group
+            if target_group == 'ALL_USERS':
+                recipients = CustomUser.objects.all()
+            elif target_group == 'ALL_EMPLOYEES':
+                recipients = CustomUser.objects.filter(role='EMPLOYEE')
+            elif target_group == 'MODERATORS':
+                recipients = CustomUser.objects.filter(role='MODERATOR')
+            else:  # TARGET_SELECTED
+                recipients = CustomUser.objects.filter(id__in=recipient_ids)
+
+            announcement.recipients.set(recipients)
+
+            # Create read status for each recipient if confirmation is required
+            if requires_confirmation:
+                for recipient in recipients:
+                    AnnouncementReadStatus.objects.get_or_create(
+                        announcement=announcement,
+                        user=recipient
+                    )
+
+            return JsonResponse({
+                'success': True,
+                'message': 'Объявление успешно отправлено',
+                'announcement_id': announcement.id
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Неверный формат JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Метод не разрешен или недостаточно прав'}, status=403)
+
+
+def mark_announcement_read(request):
+    """API endpoint to mark announcement as read by user."""
+    if request.method == 'POST' and request.user.is_authenticated:
+        try:
+            data = json.loads(request.body)
+            announcement_id = data.get('announcement_id')
+
+            if not announcement_id:
+                return JsonResponse({'error': 'ID объявления обязателен'}, status=400)
+
+            from django.utils import timezone
+            announcement_read_status, created = AnnouncementReadStatus.objects.get_or_create(
+                announcement_id=announcement_id,
+                user=request.user,
+                defaults={
+                    'is_read': True,
+                    'read_at': timezone.now()
+                }
+            )
+
+            if not created:
+                announcement_read_status.is_read = True
+                announcement_read_status.read_at = timezone.now()
+                announcement_read_status.save()
+
+            return JsonResponse({
+                'success': True,
+                'message': 'Объявление отмечено как прочитанное'
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Неверный формат JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Метод не разрешен'}, status=405)
+
+
+def get_user_announcements(request):
+    """API endpoint to get announcements for current user."""
+    if request.user.is_authenticated:
+        try:
+            # Get announcements for this user
+            user_announcements = Announcement.objects.filter(
+                recipients=request.user
+            ).order_by('-created_at')
+
+            announcements_data = []
+            for announcement in user_announcements:
+                read_status = AnnouncementReadStatus.objects.filter(
+                    announcement=announcement,
+                    user=request.user
+                ).first()
+
+                announcements_data.append({
+                    'id': announcement.id,
+                    'title': announcement.title,
+                    'content': announcement.content,
+                    'created_by': announcement.created_by.get_full_name() or announcement.created_by.username if announcement.created_by else 'System',
+                    'created_at': announcement.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'requires_confirmation': announcement.requires_confirmation,
+                    'is_read': read_status.is_read if read_status else False,
+                    'read_at': read_status.read_at.strftime('%Y-%m-%d %H:%M:%S') if read_status and read_status.read_at else None
+                })
+
+            return JsonResponse({
+                'success': True,
+                'announcements': announcements_data
+            })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Пользователь не аутентифицирован'}, status=403)

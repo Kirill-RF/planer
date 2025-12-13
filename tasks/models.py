@@ -364,6 +364,84 @@ class SurveyAnswerPhoto(models.Model):
     class Meta:
         verbose_name = _('Фото ответа')
         verbose_name_plural = _('Фото ответов')
+
+
+class Announcement(models.Model):
+    """Модель объявления для отправки пользователям."""
+    
+    TARGET_ALL_USERS = 'ALL_USERS'
+    TARGET_MODERATORS = 'MODERATORS'
+    TARGET_ALL_EMPLOYEES = 'ALL_EMPLOYEES'
+    TARGET_SELECTED = 'SELECTED'
+    
+    TARGET_CHOICES = [
+        (TARGET_ALL_USERS, _('Все пользователи')),
+        (TARGET_ALL_EMPLOYEES, _('Все сотрудники')),
+        (TARGET_MODERATORS, _('Модераторы')),
+        (TARGET_SELECTED, _('Выбранные пользователи')),
+    ]
+    
+    title = models.CharField(_('Заголовок'), max_length=200)
+    content = models.TextField(_('Текст объявления'))
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_announcements',
+        verbose_name=_('Создано модератором')
+    )
+    target_group = models.CharField(
+        _('Группа получателей'),
+        max_length=20,
+        choices=TARGET_CHOICES,
+        default=TARGET_SELECTED
+    )
+    recipients = models.ManyToManyField(
+        CustomUser,
+        blank=True,
+        related_name='received_announcements',
+        verbose_name=_('Получатели')
+    )
+    requires_confirmation = models.BooleanField(
+        _('Требовать подтверждения прочтения'),
+        default=False
+    )
+    created_at = models.DateTimeField(_('Создано'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('Обновлено'), auto_now=True)
+    
+    def __str__(self):
+        return self.title
+    
+    class Meta:
+        verbose_name = _('Объявление')
+        verbose_name_plural = _('Объявления')
+        ordering = ['-created_at']
+
+
+class AnnouncementReadStatus(models.Model):
+    """Статус прочтения объявления пользователем."""
+    
+    announcement = models.ForeignKey(
+        Announcement,
+        on_delete=models.CASCADE,
+        related_name='read_status',
+        verbose_name=_('Объявление')
+    )
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('Пользователь')
+    )
+    is_read = models.BooleanField(_('Прочитано'), default=False)
+    read_at = models.DateTimeField(_('Время прочтения'), null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.announcement.title} - {self.user.username}"
+    
+    class Meta:
+        verbose_name = _('Статус прочтения')
+        verbose_name_plural = _('Статусы прочтения')
+        unique_together = ['announcement', 'user']
         
         
         
