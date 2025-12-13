@@ -689,3 +689,19 @@ def autocomplete_clients(request):
     client_list = [{'id': client.id, 'name': client.name} for client in clients]
     
     return JsonResponse({'clients': client_list})
+def autocomplete_tasks(request):
+    """API endpoint for task autocomplete functionality with case-insensitive search."""
+    query = request.GET.get('q', '').strip()
+
+    if len(query) < 1:
+        return JsonResponse({'tasks': []})
+
+    # Case-insensitive search using __icontains
+    escaped_query = re.escape(query)
+    tasks = Task.objects.filter(
+            title__iregex=escaped_query
+        ).distinct()[:20]
+
+    task_list = [{'id': task.id, 'title': task.title} for task in tasks]
+
+    return JsonResponse({'tasks': task_list})
