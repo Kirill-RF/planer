@@ -340,6 +340,17 @@
     .autocomplete-item:last-child {
         border-bottom: none;
     }
+    
+    #task-dropdown {
+        display: block;
+        margin-top: 5px;
+        max-height: 150px;
+        overflow-y: auto;
+        width: 100%;
+        padding: 5px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+    }
 </style>
 
 <div class="module">
@@ -365,6 +376,7 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <button type="button" class="button" onclick="clearClientSearch()" style="margin-top: 5px;">Очистить данные</button>
                 </div>
                 
                 <div class="filter-item" style="min-width: 180px; max-width: 220px;">
@@ -380,6 +392,18 @@
                                 {{ task.title }}
                             </option>
                         {% endfor %}
+                    </select>
+                    <!-- Dropdown list for tasks with scroll -->
+                    <select name="task_dropdown" id="task-dropdown" onchange="selectTaskFromDropdown(this)">
+                        <option value="">Выберите задачу...</option>
+                        {% for task in tasks|slice:":8" %}
+                            <option value="{{ task.id }}" {% if current_filters.task|add:"0" == task.id %}selected{% endif %}>
+                                {{ task.title }}
+                            </option>
+                        {% endfor %}
+                        {% if tasks|length > 8 %}
+                            <option value="" disabled>... и еще {{ tasks|length|add:"-8" }} задач(и)</option>
+                        {% endif %}
                     </select>
                 </div>
                 
@@ -490,6 +514,9 @@ const answersPerPage = 10;
 // Load grouped answers on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadGroupedAnswers();
+    // Initialize synchronization after page load
+    setTimeout(syncTaskDropdownWithSearch, 100); // Small delay to ensure elements are rendered
+    setTimeout(updateTaskDropdownFromFilters, 150); // Additional delay to sync with URL filters
 });
 
 function loadGroupedAnswers() {
@@ -566,7 +593,7 @@ function renderAnswers() {
                 </h4>
                 <div class="labels">
                     ${isNew ? '<span class="label label-new">Новая</span>' : ''}
-                    ${isRead ? '<span class="label label-read">Прочитано</span>' : ''}
+                    ${isRead ? '<span class="label label-read">Обработано</span>' : ''}
                 </div>
             </div>
             <div class="answer-card-content" id="content-${answerGroup.id}">
@@ -579,7 +606,7 @@ function renderAnswers() {
                         <strong>Дата:</strong> ${new Date(answerGroup.dateCreated).toLocaleString()}
                     </div>
                     <button class="mark-as-read-btn" onclick="markAsRead('${answerGroup.id}', event)" ${isRead ? 'disabled' : ''}>
-                        ${isRead ? 'Прочитано' : 'Отметить как прочитано'}
+                        ${isRead ? 'Обработано' : 'Отметить, как \"Обработано\"'}
                     </button>
                 </div>
                 
@@ -652,12 +679,12 @@ function markAsRead(answerId, event) {
             cardHeader.classList.remove('new');
             cardHeader.classList.add('read');
             
-            markBtn.textContent = 'Прочитано';
+            markBtn.textContent = 'Обработано';
             markBtn.disabled = true;
             
             // Add read label
             const labelsContainer = cardHeader.querySelector('.labels');
-            labelsContainer.innerHTML += '<span class="label label-read">Прочитано</span>';
+            labelsContainer.innerHTML += '<span class="label label-read">Обработано</span>';
             
             // Update the data in currentAnswers array
             const answerIndex = currentAnswers.findIndex(a => a.id === answerId);
@@ -761,6 +788,63 @@ function updatePagination(totalPages) {
 function changePage(page) {
     currentPage = page;
     renderAnswers();
+}
+
+// Function to handle task selection from dropdown
+function selectTaskFromDropdown(selectElement) {
+    const selectedTaskId = selectElement.value;
+    const taskSelect = document.getElementById('task-select');
+    const taskSearch = document.getElementById('task-search');
+    
+    // Update the hidden select element
+    taskSelect.value = selectedTaskId;
+    
+    // Update the search field to show the selected task title
+    if (selectedTaskId) {
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        taskSearch.value = selectedOption.text;
+    } else {
+        taskSearch.value = '';
+    }
+    
+    // Apply the filter
+    loadGroupedAnswers();
+}
+
+// Synchronize task dropdown with search field
+function syncTaskDropdownWithSearch() {
+    const taskSearch = document.getElementById('task-search');
+    const taskDropdown = document.getElementById('task-dropdown');
+    const taskSelect = document.getElementById('task-select');
+    
+    // When search field changes, update dropdown selection
+    if (taskSelect.value) {
+        // Find matching option in dropdown
+        for (let i = 0; i < taskDropdown.options.length; i++) {
+            if (taskDropdown.options[i].value === taskSelect.value) {
+                taskDropdown.selectedIndex = i;
+                break;
+            }
+        }
+    } else {
+        taskDropdown.selectedIndex = 0; // Select default option
+    }
+}
+
+// Update dropdown when filters change
+function updateTaskDropdownFromFilters() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskIdFromUrl = urlParams.get('task');
+    
+    if (taskIdFromUrl) {
+        const taskDropdown = document.getElementById('task-dropdown');
+        for (let i = 0; i < taskDropdown.options.length; i++) {
+            if (taskDropdown.options[i].value === taskIdFromUrl) {
+                taskDropdown.selectedIndex = i;
+                break;
+            }
+        }
+    }
 }
 
 // Close modal when clicking outside the image
@@ -918,6 +1002,9 @@ if (taskSearchInput) {
             // If search is cleared, clear the hidden select as well
             const select = document.getElementById('task-select');
             select.value = '';
+            // Also clear the dropdown
+            const taskDropdown = document.getElementById('task-dropdown');
+            taskDropdown.selectedIndex = 0;
             return;
         }
         
@@ -950,6 +1037,15 @@ if (taskSearchInput) {
                         // Update the hidden select element with the exact task ID
                         const select = document.getElementById('task-select');
                         select.value = this.dataset.taskId;
+
+                        // Update the dropdown selection to match
+                        const taskDropdown = document.getElementById('task-dropdown');
+                        for (let i = 0; i < taskDropdown.options.length; i++) {
+                            if (taskDropdown.options[i].value === this.dataset.taskId) {
+                                taskDropdown.selectedIndex = i;
+                                break;
+                            }
+                        }
                         
                         // Apply the filter
                         loadGroupedAnswers();
@@ -1006,6 +1102,25 @@ if (taskSearchInput) {
             }
         });
     }
+}
+
+// Function to clear client search field and related selections
+function clearClientSearch() {
+    const clientSearchInput = document.getElementById('client-search');
+    const clientSelect = document.getElementById('client-select');
+    const autocompleteList = document.getElementById('client-autocomplete-list');
+    
+    // Clear the search input
+    clientSearchInput.value = '';
+    
+    // Clear the hidden select
+    clientSelect.value = '';
+    
+    // Hide autocomplete list
+    autocompleteList.style.display = 'none';
+    
+    // Reload answers to apply the cleared filter
+    loadGroupedAnswers();
 }
 </script>
 {% endblock %}
