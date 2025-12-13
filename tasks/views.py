@@ -5,7 +5,7 @@ Task management views.
 This module provides views for displaying and managing tasks.
 Follows SOLID principles by separating concerns and providing clear interfaces.
 """
-
+import re
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import user_passes_test
@@ -678,9 +678,13 @@ def autocomplete_clients(request):
         return JsonResponse({'clients': []})
     
     # Case-insensitive search using __icontains
+    escaped_query = re.escape(query)
     clients = Client.objects.filter(
-        name__icontains=query
-    ).order_by('name')[:10]  # Limit to 10 results as requested
+            name__iregex=escaped_query
+        ).distinct()[:20]
+    # clients = Client.objects.filter(
+    #     name__icontains=query
+    # ).order_by('name')[:10]  # Limit to 10 results as requested
     
     client_list = [{'id': client.id, 'name': client.name} for client in clients]
     
