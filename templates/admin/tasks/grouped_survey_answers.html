@@ -376,6 +376,7 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <button type="button" class="button" onclick="clearClientSearch()" style="margin-top: 5px;">Очистить данные</button>
                 </div>
                 
                 <div class="filter-item" style="min-width: 180px; max-width: 220px;">
@@ -1101,6 +1102,25 @@ if (taskSearchInput) {
             }
         });
     }
+}
+
+// Function to clear client search field and related selections
+function clearClientSearch() {
+    const clientSearchInput = document.getElementById('client-search');
+    const clientSelect = document.getElementById('client-select');
+    const autocompleteList = document.getElementById('client-autocomplete-list');
+    
+    // Clear the search input
+    clientSearchInput.value = '';
+    
+    // Clear the hidden select
+    clientSelect.value = '';
+    
+    // Hide autocomplete list
+    autocompleteList.style.display = 'none';
+    
+    // Reload answers to apply the cleared filter
+    loadGroupedAnswers();
 }
 </script>
 {% endblock %}
