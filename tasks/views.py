@@ -665,3 +665,20 @@ def search_clients(request):
             return JsonResponse({'clients': client_list})
 
     return JsonResponse({'error': 'Метод не поддерживается'}, status=400)
+
+
+def autocomplete_clients(request):
+    """API endpoint for client autocomplete functionality with case-insensitive search."""
+    query = request.GET.get('q', '').strip()
+    
+    if len(query) < 1:
+        return JsonResponse({'clients': []})
+    
+    # Case-insensitive search using __icontains
+    clients = Client.objects.filter(
+        name__icontains=query
+    ).order_by('name')[:10]  # Limit to 10 results as requested
+    
+    client_list = [{'id': client.id, 'name': client.name} for client in clients]
+    
+    return JsonResponse({'clients': client_list})

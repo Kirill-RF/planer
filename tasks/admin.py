@@ -20,7 +20,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # Import the new API functions
-from .views import getGroupedAnswers, markAsRead
+from .views import getGroupedAnswers, markAsRead, autocomplete_clients
 
 class SurveyQuestionChoiceInline(NestedTabularInline):
     """Inline choices for survey questions."""
@@ -437,6 +437,9 @@ class SurveyAnswerAdmin(admin.ModelAdmin):
             path('api/mark-as-read/', 
                  self.admin_site.admin_view(markAsRead), 
                  name='mark_as_read_api'),
+            path('autocomplete_clients/', 
+                 self.admin_site.admin_view(autocomplete_clients), 
+                 name='autocomplete_clients'),
         ]
         return custom_urls + urls
 

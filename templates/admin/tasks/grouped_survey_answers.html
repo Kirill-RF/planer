@@ -304,6 +304,42 @@
         margin-bottom: 15px;
         opacity: 0.5;
     }
+    
+    /* Autocomplete styles */
+    .autocomplete-container {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+    
+    .autocomplete-list {
+        position: absolute;
+        z-index: 1000;
+        background: white;
+        border: 1px solid #ccc;
+        border-top: none;
+        max-height: 200px;
+        overflow-y: auto;
+        width: 100%;
+        display: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 0 0 4px 4px;
+    }
+    
+    .autocomplete-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s;
+    }
+    
+    .autocomplete-item:hover, .autocomplete-item.active {
+        background-color: #f0f8ff;
+    }
+    
+    .autocomplete-item:last-child {
+        border-bottom: none;
+    }
 </style>
 
 <div class="module">
@@ -319,8 +355,11 @@
             <div class="filter-row compact" style="flex-wrap: wrap;">
                 <div class="filter-item" style="min-width: 180px; max-width: 220px;">
                     <label for="client-search">Клиент:</label>
-                    <input type="text" id="client-search" name="client_search" placeholder="Поиск..." value="{{ current_filters.client_search|default:'' }}">
-                    <select name="client" id="client-select">
+                    <div class="autocomplete-container">
+                        <input type="text" id="client-search" name="client_search" placeholder="Поиск..." value="{{ current_filters.client_search|default:'' }}">
+                        <div id="client-autocomplete-list" class="autocomplete-list"></div>
+                    </div>
+                    <select name="client" id="client-select" style="display:none;">
                         <option value="">Все клиенты</option>
                         {% for client in clients %}
                             <option value="{{ client.id }}" {% if current_filters.client|add:"0" == client.id %}selected{% endif %}>
@@ -732,32 +771,124 @@ document.getElementById('filter-form').addEventListener('keypress', function(e) 
 // Client search with autocomplete - case insensitive
 const clientSearchInput = document.getElementById('client-search');
 if (clientSearchInput) {
+    let currentFocus = -1;
+    let autocompleteItems = [];
+    
     clientSearchInput.addEventListener('input', function() {
-        const searchTerm = this.value.toLowerCase();
-        const select = document.getElementById('client-select');
+        const searchTerm = this.value.trim();
+        const autocompleteList = document.getElementById('client-autocomplete-list');
         
-        // Show/hide options based on search term (case insensitive)
-        for (let i = 0; i < select.options.length; i++) {
-            const option = select.options[i];
-            if (option.text.toLowerCase().includes(searchTerm) || searchTerm === '') {
-                option.style.display = '';
-            } else {
-                option.style.display = 'none';
-            }
+        // Clear previous items
+        autocompleteList.innerHTML = '';
+        currentFocus = -1;
+        
+        if (searchTerm.length < 1) {
+            autocompleteList.style.display = 'none';
+            return;
         }
         
-        // If there's only one matching option and user pressed Enter, select it
-        if (event.key === 'Enter' && searchTerm) {
-            event.preventDefault();
-            for (let i = 0; i < select.options.length; i++) {
-                const option = select.options[i];
-                if (option.text.toLowerCase().includes(searchTerm) && option.style.display !== 'none') {
-                    option.selected = true;
-                    break;
+        // Fetch autocomplete suggestions
+        fetch(`${window.location.pathname}autocomplete_clients/?q=${encodeURIComponent(searchTerm)}`)
+            .then(response => response.json())
+            .then(data => {
+                autocompleteItems = data.clients || [];
+                
+                if (autocompleteItems.length === 0) {
+                    autocompleteList.style.display = 'none';
+                    return;
                 }
+                
+                autocompleteList.style.display = 'block';
+                
+                autocompleteItems.forEach((client, index) => {
+                    const item = document.createElement('div');
+                    item.classList.add('autocomplete-item');
+                    item.innerHTML = highlightText(client.name, searchTerm);
+                    item.dataset.clientId = client.id;
+                    item.dataset.clientName = client.name;
+                    
+                    item.addEventListener('click', function() {
+                        clientSearchInput.value = this.dataset.clientName;
+                        autocompleteList.innerHTML = '';
+                        autocompleteList.style.display = 'none';
+                        currentFocus = -1;
+                        
+                        // Update the hidden select element
+                        const select = document.getElementById('client-select');
+                        for (let option of select.options) {
+                            if (parseInt(option.value) === parseInt(this.dataset.clientId)) {
+                                option.selected = true;
+                                break;
+                            }
+                        }
+                        
+                        // Apply the filter
+                        loadGroupedAnswers();
+                    });
+                    
+                    autocompleteList.appendChild(item);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching autocomplete suggestions:', error);
+            });
+    });
+    
+    // Handle keyboard navigation
+    clientSearchInput.addEventListener('keydown', function(e) {
+        const autocompleteList = document.getElementById('client-autocomplete-list');
+        const items = autocompleteList.querySelectorAll('.autocomplete-item');
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            currentFocus = (currentFocus + 1) % items.length;
+            updateActiveItem(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            currentFocus = (currentFocus - 1 + items.length) % items.length;
+            updateActiveItem(items);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (currentFocus >= 0 && items[currentFocus]) {
+                items[currentFocus].click();
             }
+        } else if (e.key === 'Escape') {
+            autocompleteList.style.display = 'none';
+            currentFocus = -1;
         }
     });
+    
+    // Hide autocomplete when clicking outside
+    document.addEventListener('click', function(e) {
+        if (e.target !== clientSearchInput && !e.target.closest('.autocomplete-container')) {
+            const autocompleteList = document.getElementById('client-autocomplete-list');
+            autocompleteList.style.display = 'none';
+            currentFocus = -1;
+        }
+    });
+    
+    // Function to highlight matching text
+    function highlightText(text, highlight) {
+        if (!highlight) return text;
+        const regex = new RegExp(`(${escapeRegExp(highlight)})`, 'gi');
+        return text.replace(regex, '<strong>$1</strong>');
+    }
+    
+    // Function to escape special characters for regex
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    
+    // Function to update active item
+    function updateActiveItem(items) {
+        items.forEach((item, index) => {
+            if (index === currentFocus) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
 }
 
 // Task search with autocomplete - case insensitive
@@ -766,7 +897,7 @@ if (taskSearchInput) {
     taskSearchInput.addEventListener('input', function() {
         const searchTerm = this.value.toLowerCase();
         const select = document.getElementById('task-select');
-        
+
         // Show/hide options based on search term (case insensitive)
         for (let i = 0; i < select.options.length; i++) {
             const option = select.options[i];
